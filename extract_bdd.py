@@ -10,9 +10,10 @@ Requêtes SQL documentées (C2) :
   - Optimisation : index sur interventions.site_id (migration 019 Nexo)
 
 Gestion des erreurs :
-  - Base inaccessible → fallback sur données simulées
-  - Table absente → log d'erreur explicite
-  - Connexion refusée → message d'aide
+  - Toute erreur d'extraction (connexion refusée, base inaccessible, requête
+    invalide, colonne/table absente...) est fatale : log ERROR détaillé puis
+    l'exception remonte. Pas de fallback silencieux — une extraction ratée
+    doit être visible, pas masquée par des données simulées.
 """
 
 import pandas as pd
@@ -20,8 +21,6 @@ import logging
 import os
 from pathlib import Path
 from dotenv import load_dotenv
-from faker import Faker
-import random
 
 load_dotenv()
 
@@ -30,9 +29,6 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(message)s"
 )
 logger = logging.getLogger(__name__)
-
-fake = Faker("fr_FR")
-random.seed(42)
 
 OUTPUT_DIR = Path("data/raw")
 OUTPUT_FILE = OUTPUT_DIR / "nexo_export.csv"
@@ -49,19 +45,21 @@ SQL_CLIENTS_AVEC_SITES = """
 -- Filtre : aucun filtre sur is_active (colonne absente sur clients dans ce schéma)
 -- Colonnes sélectionnées : identité client, coordonnées, données site
 -- Optimisation : index implicite sur sites.client_id (FK PostgreSQL)
+-- Colonnes volontairement absentes (schéma actuel) :
+--   - c.telephone : supprimé de `clients` par la migration 060, déplacé vers
+--     le modèle Contact (rôle "client") — hors scope de cette extraction.
+--   - s.type_site : n'a jamais existé dans le schéma Nexo, aucun équivalent.
 
 SELECT
     c.id            AS client_id,
-    c.raison_sociale,
+    c.nom           AS raison_sociale,
     c.email         AS client_email,
-    c.telephone     AS client_telephone,
     c.adresse       AS client_adresse,
     s.id            AS site_id,
     s.nom           AS site_nom,
     s.adresse       AS site_adresse,
     s.ville         AS site_ville,
     s.code_postal   AS site_code_postal,
-    s.type_site,
     c.created_at    AS client_created_at
 FROM clients c
 LEFT JOIN sites s ON s.client_id = c.id
@@ -79,7 +77,7 @@ SQL_INTERVENTIONS_PAR_CLIENT = """
 
 SELECT
     c.id                            AS client_id,
-    c.raison_sociale,
+    c.nom                           AS raison_sociale,
     COUNT(i.id)                     AS nb_interventions_total,
     COUNT(CASE WHEN i.statut = 'termine' THEN 1 END)
                                     AS nb_interventions_terminees,
@@ -88,7 +86,7 @@ FROM clients c
 LEFT JOIN sites s ON s.client_id = c.id
 LEFT JOIN interventions i ON i.site_id = s.id
     AND i.date_debut < NOW()
-GROUP BY c.id, c.raison_sociale
+GROUP BY c.id, c.nom
 ORDER BY nb_interventions_total DESC;
 """
 
@@ -119,14 +117,14 @@ ORDER BY e.nom, e.prenom;
 def extract_from_postgres() -> pd.DataFrame:
     """
     Extrait les données depuis PostgreSQL Nexo.
-    Retourne None si la base est inaccessible.
+    Lève une exception si l'extraction échoue — aucun fallback silencieux.
     """
+    if not DATABASE_URL:
+        raise ValueError("DATABASE_URL non défini dans .env")
+
     try:
         import psycopg2
         import psycopg2.extras
-
-        if not DATABASE_URL:
-            raise ValueError("DATABASE_URL non défini dans .env")
 
         logger.info(f"Connexion à PostgreSQL : {DATABASE_URL[:30]}...")
         conn = psycopg2.connect(DATABASE_URL)
@@ -151,58 +149,9 @@ def extract_from_postgres() -> pd.DataFrame:
         logger.info("Connexion PostgreSQL fermée proprement")
         return df_final
 
-    except ImportError:
-        logger.error("psycopg2 non installé — lancer : uv add psycopg2-binary")
-        return None
-    except Exception as e:
-        logger.warning(f"Base PostgreSQL inaccessible : {e}")
-        logger.info("Basculement sur données simulées")
-        return None
-
-
-def generate_simulated_nexo_data() -> pd.DataFrame:
-    """
-    Génère des données simulées représentatives de l'export Nexo.
-    Utilisé quand la base PostgreSQL n'est pas accessible (ex. CI/CD).
-    """
-    logger.info("Génération de données Nexo simulées...")
-
-    TYPES_SITES = ["bureau", "entrepot", "commerce", "hopital", "ecole"]
-    STATUTS = ["planifie", "en_cours", "termine", "annule"]
-
-    rows = []
-    for client_id in range(1, 21):
-        raison_sociale = fake.company()
-        client_email = fake.company_email()
-        client_tel = fake.phone_number()
-        client_adresse = fake.address().replace("\n", ", ")
-
-        nb_sites = random.randint(1, 4)
-        for site_id_offset in range(nb_sites):
-            nb_interventions = random.randint(0, 15)
-            rows.append({
-                "client_id": client_id,
-                "raison_sociale": raison_sociale,
-                "client_email": client_email,
-                "client_telephone": client_tel,
-                "client_adresse": client_adresse,
-                "site_id": client_id * 10 + site_id_offset,
-                "site_nom": f"Site {fake.city()}",
-                "site_adresse": fake.street_address(),
-                "site_ville": fake.city(),
-                "site_code_postal": fake.postcode(),
-                "type_site": random.choice(TYPES_SITES),
-                "client_created_at": fake.date_between(
-                    start_date="-2y", end_date="-1m"
-                ),
-                "nb_interventions_total": nb_interventions,
-                "derniere_intervention": fake.date_between(
-                    start_date="-6m", end_date="today"
-                ) if nb_interventions > 0 else None,
-                "source": "simule",
-            })
-
-    return pd.DataFrame(rows)
+    except Exception:
+        logger.error("Extraction PostgreSQL échouée", exc_info=True)
+        raise
 
 
 def main():
@@ -211,12 +160,7 @@ def main():
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
     df = extract_from_postgres()
-
-    if df is None:
-        df = generate_simulated_nexo_data()
-        df["source"] = "simule"
-    else:
-        df["source"] = "postgresql_nexo"
+    df["source"] = "postgresql_nexo"
 
     logger.info(f"Lignes extraites : {len(df)}")
     logger.info(f"Colonnes : {list(df.columns)}")

@@ -241,7 +241,8 @@ def nettoyer_nexo_export(fichier: Path) -> pd.DataFrame:
     df["raison_sociale"] = df["raison_sociale"].str.strip().str.title()
     df["site_ville"] = df["site_ville"].str.strip().str.title()
     df["site_code_postal"] = df["site_code_postal"].astype(str).str.zfill(5)
-    df["client_telephone"] = df["client_telephone"].apply(normaliser_telephone)
+    # client_telephone retiré de extract_bdd.py (colonne absente du schéma
+    # actuel, cf. commentaire SQL_CLIENTS_AVEC_SITES) — plus de colonne à normaliser ici.
     df["nb_interventions_total"] = df["nb_interventions_total"].fillna(0).astype(int)
     df["type_donnee"] = "client_nexo"
 

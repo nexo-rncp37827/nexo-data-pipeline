@@ -141,16 +141,9 @@ def main():
         logger.warning("Aucune donnée client à importer")
         return
 
-    try:
-        resultats = importer(df)
-        logger.info(f"Import terminé : {resultats['inserts']} lignes importées, "
-                    f"{resultats['erreurs']} erreurs")
-    except Exception as e:
-        logger.error(f"Import échoué : {e}")
-        logger.info("Note : sans base PostgreSQL, exécuter les scripts d'extraction "
-                    "et de nettoyage suffit pour valider C1/C2/C3. "
-                    "L'import (C4) nécessite une base active.")
-
+    resultats = importer(df)
+    logger.info(f"Import terminé : {resultats['inserts']} lignes importées, "
+                f"{resultats['erreurs']} erreurs")
     logger.info("=== Import terminé ===")
 
 
