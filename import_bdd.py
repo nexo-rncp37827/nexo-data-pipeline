@@ -96,7 +96,18 @@ def charger_dataset() -> pd.DataFrame:
             "Lancer clean_aggregate.py d'abord."
         )
 
-    df = pd.read_csv(INPUT_FILE, encoding="utf-8")
+    # dtype forcé en str pour les codes postaux : le CSV ne conserve aucune
+    # métadonnée de type, donc une colonne "code_postal"/"site_code_postal"
+    # entièrement numérique (mélangée à des NaN venant d'autres sources)
+    # serait réinterprétée en float64 par pandas au chargement — malgré le
+    # zero-padding déjà fait par clean_aggregate.py — ce qui produirait des
+    # "69120.0" et, pire, tronquerait silencieusement les codes postaux
+    # commençant par un zéro (ex. "01000" -> 1000.0 -> "1000").
+    df = pd.read_csv(
+        INPUT_FILE,
+        encoding="utf-8",
+        dtype={"code_postal": str, "site_code_postal": str},
+    )
     logger.info(f"Dataset chargé : {len(df)} lignes totales")
 
     df_clients = df[df["type_donnee"] == "client_nexo"].copy()

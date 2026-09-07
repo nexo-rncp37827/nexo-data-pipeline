@@ -156,7 +156,13 @@ def nettoyer_adresses(fichier: Path) -> pd.DataFrame:
         logger.warning(f"Fichier absent : {fichier}")
         return pd.DataFrame()
 
-    df = pd.read_csv(fichier, encoding="utf-8")
+    # dtype forcé en str pour code_postal : sans ça, une ligne en erreur de
+    # géocodage (code_postal=NaN) suffit à faire réinterpréter toute la
+    # colonne en float64 par pandas — "69120" devient alors "69120.0" avant
+    # même que le zfill ci-dessous ne s'exécute (voir même correctif dans
+    # nettoyer_nexo_export ci-dessous et import_bdd.py, où le bug a été
+    # repéré en base).
+    df = pd.read_csv(fichier, encoding="utf-8", dtype={"code_postal": str})
     logger.info(f"API Adresse : {len(df)} lignes chargées")
 
     # Suppression des doublons sur l'adresse normalisée
@@ -234,7 +240,12 @@ def nettoyer_nexo_export(fichier: Path) -> pd.DataFrame:
         logger.warning(f"Fichier absent : {fichier}")
         return pd.DataFrame()
 
-    df = pd.read_csv(fichier, encoding="utf-8")
+    # dtype forcé en str pour site_code_postal : les clients sans site (LEFT
+    # JOIN -> NaN dans extract_bdd.py) suffisent à faire réinterpréter toute
+    # la colonne en float64 au chargement du CSV — "69120" devient "69120.0"
+    # avant même le zfill ci-dessous. C'est ce mécanisme précis qui a produit
+    # le "nan"/"69120.0" trouvé en base (voir import_bdd.py).
+    df = pd.read_csv(fichier, encoding="utf-8", dtype={"site_code_postal": str})
     logger.info(f"Export Nexo : {len(df)} lignes chargées")
 
     df = df.drop_duplicates(subset=["client_id", "site_id"])
