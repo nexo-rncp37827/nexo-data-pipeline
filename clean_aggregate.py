@@ -8,7 +8,7 @@ Il ne fait aucune extraction — uniquement du nettoyage et de la normalisation.
 
 Traitements appliqués :
   1. Chargement des 4 fichiers CSV bruts
-  2. Suppression des doublons (sur SIRET, email, référence)
+  2. Suppression des doublons (sur adresse normalisée, email, référence, client/site)
   3. Homogénéisation des formats de dates (→ YYYY-MM-DD)
   4. Normalisation des numéros de téléphone (→ 0X XX XX XX XX)
   5. Normalisation de la casse (noms en Title Case)
@@ -147,7 +147,7 @@ def supprimer_corrompues(df: pd.DataFrame, champs_obligatoires: list) -> pd.Data
 # CHARGEMENT ET NETTOYAGE PAR SOURCE
 # ---------------------------------------------------------------------------
 
-def nettoyer_sirene(fichier: Path) -> pd.DataFrame:
+def nettoyer_adresses(fichier: Path) -> pd.DataFrame:
     """Nettoyage des données API Adresse (adresse.data.gouv.fr).
     Colonnes : query_originale, adresse_normalisee, rue, code_postal, ville,
                departement, longitude, latitude, score_geocodage, type_site, erreur
@@ -259,13 +259,13 @@ def main():
 
     CLEAN_DIR.mkdir(parents=True, exist_ok=True)
 
-    df_sirene = nettoyer_sirene(RAW_DIR / "sirene.csv")
+    df_adresses = nettoyer_adresses(RAW_DIR / "adresses_geocodees.csv")
     df_salaries = nettoyer_salaries_legacy(RAW_DIR / "salaries_legacy.csv")
     df_tarifs = nettoyer_tarifs_scraping(RAW_DIR / "tarifs_scraping.csv")
     df_nexo = nettoyer_nexo_export(RAW_DIR / "nexo_export.csv")
 
     datasets = {
-        "sirene": df_sirene,
+        "adresses": df_adresses,
         "salaries": df_salaries,
         "tarifs": df_tarifs,
         "nexo": df_nexo,

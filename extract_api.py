@@ -1,13 +1,19 @@
 """
 extract_api.py — C1 : Extraction depuis API REST
-Source : API SIRENE (api.insee.fr) — validation et enrichissement SIRET clients Nexo
-Produit : data/raw/sirene.csv
+Source : API Adresse du gouvernement (api-adresse.data.gouv.fr) — géocodage
+Produit : data/raw/adresses_geocodees.csv
 
 Logique :
-- Génère une liste de SIRET simulés représentatifs de clients Nexo
-- Interroge l'API SIRENE pour chaque SIRET (données publiques, sans clé)
-- Sauvegarde les résultats enrichis (raison sociale, adresse, statut)
-- Gère les erreurs : timeout, SIRET invalide, API indisponible
+- Entrée : liste d'adresses de sites clients Nexo, codées en dur (ADRESSES_CLIENTS)
+- Interroge l'API Adresse (Base Adresse Nationale, publique, sans clé) pour
+  chaque adresse
+- Sauvegarde les résultats géocodés (adresse normalisée, coordonnées GPS,
+  score de géocodage)
+- Gère les erreurs : timeout, adresse non trouvée, API indisponible
+
+Note : ce script ne fait aucune validation SIRET/SIRENE — c'est du géocodage
+d'adresses uniquement (voir Option C, décision du 07/09/2026 : le critère C1
+est couvert par ailleurs via extract_bdd.py et generate_excel_template.py).
 """
 
 import requests
@@ -26,7 +32,7 @@ logger = logging.getLogger(__name__)
 fake = Faker("fr_FR")
 
 OUTPUT_DIR = Path("data/raw")
-OUTPUT_FILE = OUTPUT_DIR / "sirene.csv"
+OUTPUT_FILE = OUTPUT_DIR / "adresses_geocodees.csv"
 
 # API Adresse (adresse.data.gouv.fr) — publique, sans clé, sans authentification
 # Documentation : https://adresse.data.gouv.fr/api-doc/adresse
