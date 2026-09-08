@@ -149,8 +149,9 @@ def supprimer_corrompues(df: pd.DataFrame, champs_obligatoires: list) -> pd.Data
 
 def nettoyer_adresses(fichier: Path) -> pd.DataFrame:
     """Nettoyage des données API Adresse (adresse.data.gouv.fr).
-    Colonnes : query_originale, adresse_normalisee, rue, code_postal, ville,
-               departement, longitude, latitude, score_geocodage, type_site, erreur
+    Colonnes : query_originale, adresse_normalisee, numero, rue, code_postal,
+               ville, departement, longitude, latitude, score_geocodage,
+               type_site, source, erreur
     """
     if not fichier.exists():
         logger.warning(f"Fichier absent : {fichier}")
