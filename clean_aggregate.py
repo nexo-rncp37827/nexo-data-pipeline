@@ -21,6 +21,10 @@ Choix de nettoyage documentés :
   - Dates : ISO 8601 (YYYY-MM-DD) pour compatibilité PostgreSQL
   - Doublons : conserve la première occurrence (ordre d'import)
   - Corrompues : ligne supprimée si nom ET email manquants simultanément
+  - Casse : .title() brut casse les sigles juridiques (SARL -> Sarl) et
+    capitalise à tort les connecteurs (et Fils -> Et Fils) — voir
+    normaliser_nom_propre(), appliquée aux colonnes concernées (raisons
+    sociales, désignations produit, noms de voie)
 """
 
 import pandas as pd
@@ -38,6 +42,16 @@ logger = logging.getLogger(__name__)
 RAW_DIR = Path("data/raw")
 CLEAN_DIR = Path("data/clean")
 OUTPUT_FILE = CLEAN_DIR / "dataset_final.csv"
+
+# Sigles juridiques français courants sans points, que .title() réduit à tort
+# (SARL -> Sarl) — repassés en majuscules par normaliser_nom_propre().
+SIGLES_JURIDIQUES = {
+    "sa", "sas", "sasu", "sarl", "eurl", "sci", "snc", "scop", "eirl", "gie", "selarl",
+}
+
+# Connecteurs français que .title() capitalise à tort en milieu de nom
+# (et Fils -> Et Fils) — repassés en minuscule sauf en tout début de chaîne.
+CONNECTEURS = {"et", "de", "du", "des", "la", "le"}
 
 
 # ---------------------------------------------------------------------------
@@ -126,6 +140,37 @@ def normaliser_contrat(contrat: str) -> str:
     return contrat.strip()
 
 
+def normaliser_nom_propre(valeur: str) -> str:
+    """
+    Title Case adapté aux noms propres français (raisons sociales,
+    désignations produit, noms de voie) — corrige deux angles morts de
+    .title() brut, confirmés sur les données réelles (raison_sociale) :
+      1. Sigles juridiques sans points (SA, SARL, SAS...) que .title()
+         réduit en Sa/Sarl/Sas, perdant l'information de forme juridique.
+         Les formes pointées (S.A.R.L.) ne sont pas concernées : chaque
+         point sert déjà de frontière de mot à .title(), elles restent
+         correctes.
+      2. Connecteurs (et, de, du, des, la, le) que .title() capitalise à
+         tort en milieu de nom (et Fils -> Et Fils). Laissés capitalisés
+         en tout début de chaîne (usage standard d'un titre).
+    """
+    if pd.isna(valeur) or str(valeur).strip() == "":
+        return "" if pd.isna(valeur) else str(valeur).strip()
+
+    mots = str(valeur).strip().title().split(" ")
+    resultat = []
+    for i, mot in enumerate(mots):
+        cle = mot.lower().rstrip(".,")
+        if cle in SIGLES_JURIDIQUES:
+            resultat.append(mot.upper())
+        elif i > 0 and cle in CONNECTEURS:
+            resultat.append(mot.lower())
+        else:
+            resultat.append(mot)
+
+    return " ".join(resultat)
+
+
 def supprimer_corrompues(df: pd.DataFrame, champs_obligatoires: list) -> pd.DataFrame:
     """
     Supprime les lignes où tous les champs obligatoires sont vides simultanément.
@@ -169,9 +214,11 @@ def nettoyer_adresses(fichier: Path) -> pd.DataFrame:
     # Suppression des doublons sur l'adresse normalisée
     df = df.drop_duplicates(subset=["adresse_normalisee"])
 
-    # Normalisation casse
-    df["ville"] = df["ville"].str.strip().str.upper()
-    df["rue"] = df["rue"].str.strip().str.title()
+    # Normalisation casse — Title Case pour homogénéité avec site_ville
+    # (nettoyer_nexo_export ci-dessous), les deux colonnes "ville" du
+    # dataset final suivent désormais la même convention.
+    df["ville"] = df["ville"].str.strip().str.title()
+    df["rue"] = df["rue"].apply(normaliser_nom_propre)
 
     # Normalisation code postal (5 chiffres)
     df["code_postal"] = df["code_postal"].astype(str).str.zfill(5)
@@ -224,7 +271,7 @@ def nettoyer_tarifs_scraping(fichier: Path) -> pd.DataFrame:
     logger.info(f"Tarifs scraping : {len(df)} lignes chargées")
 
     df = df.drop_duplicates(subset=["reference"])
-    df["designation"] = df["designation"].str.strip().str.title()
+    df["designation"] = df["designation"].apply(normaliser_nom_propre)
     df["prix_achat_ht"] = pd.to_numeric(df["prix_achat_ht"], errors="coerce").round(2)
     df["prix_vente_ht"] = pd.to_numeric(df["prix_vente_ht"], errors="coerce").round(2)
     df = df[df["prix_vente_ht"] > 0]
@@ -250,7 +297,7 @@ def nettoyer_nexo_export(fichier: Path) -> pd.DataFrame:
     logger.info(f"Export Nexo : {len(df)} lignes chargées")
 
     df = df.drop_duplicates(subset=["client_id", "site_id"])
-    df["raison_sociale"] = df["raison_sociale"].str.strip().str.title()
+    df["raison_sociale"] = df["raison_sociale"].apply(normaliser_nom_propre)
     df["site_ville"] = df["site_ville"].str.strip().str.title()
     df["site_code_postal"] = df["site_code_postal"].astype(str).str.zfill(5)
     # client_telephone retiré de extract_bdd.py (colonne absente du schéma
