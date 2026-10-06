@@ -28,7 +28,7 @@ graph MCD {
   POSSEDER [label="POSSÉDER"];
   TRAVAILLER [label="TRAVAILLER POUR"];
   SUIVRE [label="SUIVRE"];
-  CORRESPONDRE [label="CORRESPONDRE À"];
+  CORRESPONDRE [label="CORRESPONDRE À\nstatut (correspondance,\nà vérifier), distance"];
 
   CLIENT -- POSSEDER [label="0,n"];
   POSSEDER -- SITE [label="1,1"];
