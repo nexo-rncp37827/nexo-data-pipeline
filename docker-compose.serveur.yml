@@ -1,0 +1,12 @@
+# Surcharge pour le serveur de Nexo : le pipeline rejoint le réseau interne de Nexo pour lire
+# la base (compte en lecture seule) et garde le réseau par défaut pour joindre les API et
+# data.gouv.fr. La base de Nexo n'est jamais exposée hors de ce réseau.
+#   docker compose -f docker-compose.yml -f docker-compose.serveur.yml --profile pipeline run --rm pipeline python -m referentiel.extraire
+services:
+  pipeline:
+    networks: [default, nexo_interne]
+
+networks:
+  nexo_interne:
+    external: true
+    name: erp-nexo_internal

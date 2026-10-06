@@ -18,6 +18,8 @@ services:
   pipeline:
     build: .
     env_file: .env
+    # Même identifiant que l'utilisateur de la machine, pour écrire dans ./data
+    user: "${UID_HOTE:-1000}"
     volumes:
       - ./data:/app/data
     depends_on:
