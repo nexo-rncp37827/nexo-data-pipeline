@@ -1,0 +1,2390 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "API du référentiel clients — ERP Foxabrille",
+    "description": "\nRéférentiel clients de **Nexo** (ERP Foxabrille Nettoyage) : clients vérifiés, sites géocodés et\nrapprochés du registre national des copropriétés, contacts dédoublonnés. Données mises à jour\nchaque semaine par la chaîne d'import.\n\n**Authentification** : `POST /auth/jeton` avec l'identifiant et le secret de l'application\n(formulaire OAuth2, champs `username` et `password`) ; le jeton JWT renvoyé (30 min) se passe dans\nl'en-tête `Authorization: Bearer <jeton>`.\n\n**Autorisation** : portée `referentiel` pour les clients, sites et copropriétés ; portée\n`contacts` en plus pour les contacts (données personnelles). L'API est en **lecture seule** :\nelle se connecte à la base avec un compte PostgreSQL qui n'a que le droit `SELECT`.\n",
+    "version": "1.0.0"
+  },
+  "paths": {
+    "/auth/jeton": {
+      "post": {
+        "tags": [
+          "authentification"
+        ],
+        "summary": "Obtenir un jeton d'accès",
+        "description": "Échange l'identifiant (`username`) et le secret (`password`) d'une application contre un\njeton JWT. Champ `scope` facultatif : sans lui, toutes les portées de l'application sont\naccordées ; une portée demandée mais non autorisée est refusée.",
+        "operationId": "jeton_auth_jeton_post",
+        "requestBody": {
+          "content": {
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_jeton_auth_jeton_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Jeton"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Identifiants invalides",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Erreur"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/clients": {
+      "get": {
+        "tags": [
+          "clients"
+        ],
+        "summary": "Lister les clients",
+        "operationId": "lister_clients_clients_get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": [
+              "referentiel"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "name": "limite",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 500,
+              "minimum": 1,
+              "description": "Nombre maximal d'éléments",
+              "default": 100,
+              "title": "Limite"
+            },
+            "description": "Nombre maximal d'éléments"
+          },
+          {
+            "name": "decalage",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Nombre d'éléments à sauter",
+              "default": 0,
+              "title": "Decalage"
+            },
+            "description": "Nombre d'éléments à sauter"
+          },
+          {
+            "name": "type_client",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "regie",
+                    "entreprise",
+                    "copropriete",
+                    "collectivite",
+                    "particulier"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Type Client"
+            }
+          },
+          {
+            "name": "verification_siret",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "verifie",
+                    "non_trouve",
+                    "siret_invalide",
+                    "non_verifie"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Verification Siret"
+            }
+          },
+          {
+            "name": "etat_etablissement",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^(actif|ferme)$"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Etat Etablissement"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Page_Client_"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Jeton absent, invalide ou expiré",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Erreur"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Portée insuffisante",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Erreur"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/clients/{client_id}": {
+      "get": {
+        "tags": [
+          "clients"
+        ],
+        "summary": "Lire un client",
+        "operationId": "lire_client_clients__client_id__get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": [
+              "referentiel"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "name": "client_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "title": "Client Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Client"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Jeton absent, invalide ou expiré",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Erreur"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Portée insuffisante",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Erreur"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Ressource introuvable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Erreur"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/clients/{client_id}/sites": {
+      "get": {
+        "tags": [
+          "clients"
+        ],
+        "summary": "Lister les sites d'un client",
+        "operationId": "sites_du_client_clients__client_id__sites_get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": [
+              "referentiel"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "name": "client_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "title": "Client Id"
+            }
+          },
+          {
+            "name": "limite",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 500,
+              "minimum": 1,
+              "description": "Nombre maximal d'éléments",
+              "default": 100,
+              "title": "Limite"
+            },
+            "description": "Nombre maximal d'éléments"
+          },
+          {
+            "name": "decalage",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Nombre d'éléments à sauter",
+              "default": 0,
+              "title": "Decalage"
+            },
+            "description": "Nombre d'éléments à sauter"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Page_Site_"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Jeton absent, invalide ou expiré",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Erreur"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Portée insuffisante",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Erreur"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Ressource introuvable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Erreur"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/clients/{client_id}/contacts": {
+      "get": {
+        "tags": [
+          "clients",
+          "contacts"
+        ],
+        "summary": "Lister les contacts d'un client",
+        "operationId": "contacts_du_client_clients__client_id__contacts_get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": [
+              "referentiel",
+              "contacts"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "name": "client_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "title": "Client Id"
+            }
+          },
+          {
+            "name": "limite",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 500,
+              "minimum": 1,
+              "description": "Nombre maximal d'éléments",
+              "default": 100,
+              "title": "Limite"
+            },
+            "description": "Nombre maximal d'éléments"
+          },
+          {
+            "name": "decalage",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Nombre d'éléments à sauter",
+              "default": 0,
+              "title": "Decalage"
+            },
+            "description": "Nombre d'éléments à sauter"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Page_Contact_"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Jeton absent, invalide ou expiré",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Erreur"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Portée insuffisante",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Erreur"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Ressource introuvable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Erreur"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/sites": {
+      "get": {
+        "tags": [
+          "sites"
+        ],
+        "summary": "Lister les sites",
+        "operationId": "lister_sites_sites_get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": [
+              "referentiel"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "name": "limite",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 500,
+              "minimum": 1,
+              "description": "Nombre maximal d'éléments",
+              "default": 100,
+              "title": "Limite"
+            },
+            "description": "Nombre maximal d'éléments"
+          },
+          {
+            "name": "decalage",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Nombre d'éléments à sauter",
+              "default": 0,
+              "title": "Decalage"
+            },
+            "description": "Nombre d'éléments à sauter"
+          },
+          {
+            "name": "client_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Client Id"
+            }
+          },
+          {
+            "name": "code_postal",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^\\d{5}$"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Code Postal"
+            }
+          },
+          {
+            "name": "geocodage",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "fiable",
+                    "a_verifier",
+                    "echec"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Geocodage"
+            }
+          },
+          {
+            "name": "rapprochement_copropriete",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "correspondance",
+                    "a_verifier",
+                    "ambigu",
+                    "aucune",
+                    "non_evalue"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Rapprochement Copropriete"
+            }
+          },
+          {
+            "name": "client_est_syndic",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Client Est Syndic"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Page_Site_"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Jeton absent, invalide ou expiré",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Erreur"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Portée insuffisante",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Erreur"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/sites/{site_id}": {
+      "get": {
+        "tags": [
+          "sites"
+        ],
+        "summary": "Lire un site",
+        "operationId": "lire_site_sites__site_id__get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": [
+              "referentiel"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "name": "site_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "title": "Site Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Site"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Jeton absent, invalide ou expiré",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Erreur"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Portée insuffisante",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Erreur"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Ressource introuvable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Erreur"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/sites/{site_id}/contacts": {
+      "get": {
+        "tags": [
+          "sites",
+          "contacts"
+        ],
+        "summary": "Lister les contacts qui suivent un site",
+        "operationId": "contacts_du_site_sites__site_id__contacts_get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": [
+              "referentiel",
+              "contacts"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "name": "site_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "title": "Site Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Contact"
+                  },
+                  "title": "Response Contacts Du Site Sites  Site Id  Contacts Get"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Jeton absent, invalide ou expiré",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Erreur"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Portée insuffisante",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Erreur"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Ressource introuvable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Erreur"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/coproprietes": {
+      "get": {
+        "tags": [
+          "coproprietes"
+        ],
+        "summary": "Lister les copropriétés rapprochées d'un site",
+        "operationId": "lister_coproprietes_coproprietes_get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": [
+              "referentiel"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "name": "limite",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 500,
+              "minimum": 1,
+              "description": "Nombre maximal d'éléments",
+              "default": 100,
+              "title": "Limite"
+            },
+            "description": "Nombre maximal d'éléments"
+          },
+          {
+            "name": "decalage",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Nombre d'éléments à sauter",
+              "default": 0,
+              "title": "Decalage"
+            },
+            "description": "Nombre d'éléments à sauter"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Page_Copropriete_"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Jeton absent, invalide ou expiré",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Erreur"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Portée insuffisante",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Erreur"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/coproprietes/{numero_immatriculation}": {
+      "get": {
+        "tags": [
+          "coproprietes"
+        ],
+        "summary": "Lire une copropriété",
+        "operationId": "lire_copropriete_coproprietes__numero_immatriculation__get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": [
+              "referentiel"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "name": "numero_immatriculation",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Z0-9]{1,20}$",
+              "title": "Numero Immatriculation"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Copropriete"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Jeton absent, invalide ou expiré",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Erreur"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Portée insuffisante",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Erreur"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Ressource introuvable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Erreur"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/contacts": {
+      "get": {
+        "tags": [
+          "contacts"
+        ],
+        "summary": "Lister les contacts",
+        "operationId": "lister_contacts_contacts_get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": [
+              "referentiel",
+              "contacts"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "name": "limite",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 500,
+              "minimum": 1,
+              "description": "Nombre maximal d'éléments",
+              "default": 100,
+              "title": "Limite"
+            },
+            "description": "Nombre maximal d'éléments"
+          },
+          {
+            "name": "decalage",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Nombre d'éléments à sauter",
+              "default": 0,
+              "title": "Decalage"
+            },
+            "description": "Nombre d'éléments à sauter"
+          },
+          {
+            "name": "client_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Client Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Page_Contact_"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Jeton absent, invalide ou expiré",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Erreur"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Portée insuffisante",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Erreur"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/contacts/{contact_id}": {
+      "get": {
+        "tags": [
+          "contacts"
+        ],
+        "summary": "Lire un contact",
+        "operationId": "lire_contact_contacts__contact_id__get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": [
+              "referentiel",
+              "contacts"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "name": "contact_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "title": "Contact Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Contact"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Jeton absent, invalide ou expiré",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Erreur"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Portée insuffisante",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Erreur"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Ressource introuvable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Erreur"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/sante": {
+      "get": {
+        "tags": [
+          "supervision"
+        ],
+        "summary": "État du service (sans authentification, aucune donnée)",
+        "operationId": "sante_sante_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Sante"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Body_jeton_auth_jeton_post": {
+        "properties": {
+          "grant_type": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^password$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Grant Type"
+          },
+          "username": {
+            "type": "string",
+            "title": "Username"
+          },
+          "password": {
+            "type": "string",
+            "format": "password",
+            "title": "Password"
+          },
+          "scope": {
+            "type": "string",
+            "title": "Scope",
+            "default": ""
+          },
+          "client_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Client Id"
+          },
+          "client_secret": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "format": "password",
+            "title": "Client Secret"
+          }
+        },
+        "type": "object",
+        "required": [
+          "username",
+          "password"
+        ],
+        "title": "Body_jeton_auth_jeton_post"
+      },
+      "Client": {
+        "properties": {
+          "client_id": {
+            "type": "integer",
+            "title": "Client Id",
+            "description": "Identifiant du client dans Nexo"
+          },
+          "nom": {
+            "type": "string",
+            "title": "Nom"
+          },
+          "type_client": {
+            "type": "string",
+            "enum": [
+              "regie",
+              "entreprise",
+              "copropriete",
+              "collectivite",
+              "particulier"
+            ],
+            "title": "Type Client"
+          },
+          "statut": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Statut",
+            "description": "Statut commercial dans Nexo (actif, inactif…)"
+          },
+          "siret": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Siret"
+          },
+          "siren": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Siren"
+          },
+          "verification_siret": {
+            "type": "string",
+            "enum": [
+              "verifie",
+              "non_trouve",
+              "siret_invalide",
+              "non_verifie"
+            ],
+            "title": "Verification Siret",
+            "description": "Résultat de la vérification par l'API Recherche d'entreprises"
+          },
+          "denomination_officielle": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Denomination Officielle"
+          },
+          "similarite_nom": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Similarite Nom",
+            "description": "Similarité (0 à 1) entre le nom saisi et la dénomination officielle"
+          },
+          "etat_etablissement": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "actif",
+                  "ferme"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Etat Etablissement"
+          },
+          "activite_principale": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Activite Principale",
+            "description": "Code APE / NAF"
+          },
+          "nature_juridique": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nature Juridique"
+          },
+          "adresse": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Adresse"
+          },
+          "code_postal": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Code Postal"
+          },
+          "ville": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ville"
+          },
+          "date_creation": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Date Creation"
+          },
+          "date_mise_a_jour": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Date Mise A Jour"
+          },
+          "importe_le": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Importe Le"
+          }
+        },
+        "type": "object",
+        "required": [
+          "client_id",
+          "nom",
+          "type_client",
+          "statut",
+          "siret",
+          "siren",
+          "verification_siret",
+          "denomination_officielle",
+          "similarite_nom",
+          "etat_etablissement",
+          "activite_principale",
+          "nature_juridique",
+          "adresse",
+          "code_postal",
+          "ville",
+          "date_creation",
+          "date_mise_a_jour",
+          "importe_le"
+        ],
+        "title": "Client"
+      },
+      "Contact": {
+        "properties": {
+          "contact_id": {
+            "type": "integer",
+            "title": "Contact Id"
+          },
+          "client_id": {
+            "type": "integer",
+            "title": "Client Id"
+          },
+          "nom": {
+            "type": "string",
+            "title": "Nom"
+          },
+          "role": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Role"
+          },
+          "poste": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Poste"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "telephone_fixe": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Telephone Fixe",
+            "description": "Format E.164 (+33…)"
+          },
+          "telephone_portable": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Telephone Portable",
+            "description": "Format E.164 (+33…)"
+          },
+          "site_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Site Ids",
+            "description": "Sites suivis par ce contact"
+          },
+          "importe_le": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Importe Le"
+          }
+        },
+        "type": "object",
+        "required": [
+          "contact_id",
+          "client_id",
+          "nom",
+          "role",
+          "poste",
+          "email",
+          "telephone_fixe",
+          "telephone_portable",
+          "site_ids",
+          "importe_le"
+        ],
+        "title": "Contact"
+      },
+      "Copropriete": {
+        "properties": {
+          "numero_immatriculation": {
+            "type": "string",
+            "title": "Numero Immatriculation",
+            "description": "Numéro au registre national (ANAH)"
+          },
+          "adresse": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Adresse"
+          },
+          "nom_usage": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nom Usage"
+          },
+          "nombre_total_lots": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nombre Total Lots"
+          },
+          "nombre_lots_habitation": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nombre Lots Habitation"
+          },
+          "type_syndic": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Type Syndic"
+          },
+          "syndic_raison_sociale": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Syndic Raison Sociale",
+            "description": "Uniquement un syndic professionnel"
+          },
+          "syndic_siret": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Syndic Siret"
+          },
+          "mandat_en_cours": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mandat En Cours"
+          },
+          "importe_le": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Importe Le"
+          }
+        },
+        "type": "object",
+        "required": [
+          "numero_immatriculation",
+          "adresse",
+          "nom_usage",
+          "nombre_total_lots",
+          "nombre_lots_habitation",
+          "type_syndic",
+          "syndic_raison_sociale",
+          "syndic_siret",
+          "mandat_en_cours",
+          "importe_le"
+        ],
+        "title": "Copropriete"
+      },
+      "Erreur": {
+        "properties": {
+          "detail": {
+            "type": "string",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "required": [
+          "detail"
+        ],
+        "title": "Erreur"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "Jeton": {
+        "properties": {
+          "access_token": {
+            "type": "string",
+            "title": "Access Token"
+          },
+          "token_type": {
+            "type": "string",
+            "const": "bearer",
+            "title": "Token Type",
+            "default": "bearer"
+          },
+          "expires_in": {
+            "type": "integer",
+            "title": "Expires In",
+            "description": "Durée de validité en secondes"
+          },
+          "scope": {
+            "type": "string",
+            "title": "Scope",
+            "description": "Portées accordées, séparées par des espaces"
+          }
+        },
+        "type": "object",
+        "required": [
+          "access_token",
+          "expires_in",
+          "scope"
+        ],
+        "title": "Jeton"
+      },
+      "Page_Client_": {
+        "properties": {
+          "total": {
+            "type": "integer",
+            "title": "Total",
+            "description": "Nombre total d'éléments correspondant aux filtres"
+          },
+          "limite": {
+            "type": "integer",
+            "title": "Limite"
+          },
+          "decalage": {
+            "type": "integer",
+            "title": "Decalage"
+          },
+          "elements": {
+            "items": {
+              "$ref": "#/components/schemas/Client"
+            },
+            "type": "array",
+            "title": "Elements"
+          }
+        },
+        "type": "object",
+        "required": [
+          "total",
+          "limite",
+          "decalage",
+          "elements"
+        ],
+        "title": "Page[Client]"
+      },
+      "Page_Contact_": {
+        "properties": {
+          "total": {
+            "type": "integer",
+            "title": "Total",
+            "description": "Nombre total d'éléments correspondant aux filtres"
+          },
+          "limite": {
+            "type": "integer",
+            "title": "Limite"
+          },
+          "decalage": {
+            "type": "integer",
+            "title": "Decalage"
+          },
+          "elements": {
+            "items": {
+              "$ref": "#/components/schemas/Contact"
+            },
+            "type": "array",
+            "title": "Elements"
+          }
+        },
+        "type": "object",
+        "required": [
+          "total",
+          "limite",
+          "decalage",
+          "elements"
+        ],
+        "title": "Page[Contact]"
+      },
+      "Page_Copropriete_": {
+        "properties": {
+          "total": {
+            "type": "integer",
+            "title": "Total",
+            "description": "Nombre total d'éléments correspondant aux filtres"
+          },
+          "limite": {
+            "type": "integer",
+            "title": "Limite"
+          },
+          "decalage": {
+            "type": "integer",
+            "title": "Decalage"
+          },
+          "elements": {
+            "items": {
+              "$ref": "#/components/schemas/Copropriete"
+            },
+            "type": "array",
+            "title": "Elements"
+          }
+        },
+        "type": "object",
+        "required": [
+          "total",
+          "limite",
+          "decalage",
+          "elements"
+        ],
+        "title": "Page[Copropriete]"
+      },
+      "Page_Site_": {
+        "properties": {
+          "total": {
+            "type": "integer",
+            "title": "Total",
+            "description": "Nombre total d'éléments correspondant aux filtres"
+          },
+          "limite": {
+            "type": "integer",
+            "title": "Limite"
+          },
+          "decalage": {
+            "type": "integer",
+            "title": "Decalage"
+          },
+          "elements": {
+            "items": {
+              "$ref": "#/components/schemas/Site"
+            },
+            "type": "array",
+            "title": "Elements"
+          }
+        },
+        "type": "object",
+        "required": [
+          "total",
+          "limite",
+          "decalage",
+          "elements"
+        ],
+        "title": "Page[Site]"
+      },
+      "Sante": {
+        "properties": {
+          "statut": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "degrade"
+            ],
+            "title": "Statut"
+          },
+          "base": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "injoignable",
+              "non_configuree"
+            ],
+            "title": "Base"
+          }
+        },
+        "type": "object",
+        "required": [
+          "statut",
+          "base"
+        ],
+        "title": "Sante"
+      },
+      "Site": {
+        "properties": {
+          "site_id": {
+            "type": "integer",
+            "title": "Site Id",
+            "description": "Identifiant du site dans Nexo"
+          },
+          "client_id": {
+            "type": "integer",
+            "title": "Client Id"
+          },
+          "client_nom": {
+            "type": "string",
+            "title": "Client Nom"
+          },
+          "nom": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nom"
+          },
+          "adresse_saisie": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Adresse Saisie",
+            "description": "Adresse telle que saisie dans Nexo"
+          },
+          "code_postal_saisi": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Code Postal Saisi"
+          },
+          "ville_saisie": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ville Saisie"
+          },
+          "adresse_normalisee": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Adresse Normalisee",
+            "description": "Adresse renvoyée par le géocodage IGN"
+          },
+          "numero": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Numero"
+          },
+          "voie": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Voie"
+          },
+          "code_postal": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Code Postal"
+          },
+          "code_insee": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Code Insee"
+          },
+          "commune": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Commune"
+          },
+          "latitude": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latitude"
+          },
+          "longitude": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Longitude"
+          },
+          "score_geocodage": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Score Geocodage"
+          },
+          "geocodage": {
+            "type": "string",
+            "enum": [
+              "fiable",
+              "a_verifier",
+              "echec"
+            ],
+            "title": "Geocodage"
+          },
+          "date_debut_contrat": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Date Debut Contrat"
+          },
+          "date_fin_contrat": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Date Fin Contrat"
+          },
+          "rapprochement_copropriete": {
+            "type": "string",
+            "enum": [
+              "correspondance",
+              "a_verifier",
+              "ambigu",
+              "aucune",
+              "non_evalue"
+            ],
+            "title": "Rapprochement Copropriete"
+          },
+          "distance_copropriete_m": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Distance Copropriete M"
+          },
+          "immatriculations_candidates": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Immatriculations Candidates",
+            "description": "Copropriétés candidates quand le rapprochement est ambigu"
+          },
+          "numero_immatriculation": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Numero Immatriculation"
+          },
+          "nom_usage": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nom Usage",
+            "description": "Nom d'usage de la copropriété rapprochée"
+          },
+          "nombre_total_lots": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nombre Total Lots"
+          },
+          "nombre_lots_habitation": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nombre Lots Habitation"
+          },
+          "type_syndic": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Type Syndic"
+          },
+          "syndic_raison_sociale": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Syndic Raison Sociale"
+          },
+          "syndic_siret": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Syndic Siret"
+          },
+          "mandat_en_cours": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mandat En Cours"
+          },
+          "client_est_syndic": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Client Est Syndic",
+            "description": "Le client est-il le syndic de la copropriété ? Calculé, null si inconnu"
+          },
+          "importe_le": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Importe Le"
+          }
+        },
+        "type": "object",
+        "required": [
+          "site_id",
+          "client_id",
+          "client_nom",
+          "nom",
+          "adresse_saisie",
+          "code_postal_saisi",
+          "ville_saisie",
+          "adresse_normalisee",
+          "numero",
+          "voie",
+          "code_postal",
+          "code_insee",
+          "commune",
+          "latitude",
+          "longitude",
+          "score_geocodage",
+          "geocodage",
+          "date_debut_contrat",
+          "date_fin_contrat",
+          "rapprochement_copropriete",
+          "distance_copropriete_m",
+          "immatriculations_candidates",
+          "numero_immatriculation",
+          "nom_usage",
+          "nombre_total_lots",
+          "nombre_lots_habitation",
+          "type_syndic",
+          "syndic_raison_sociale",
+          "syndic_siret",
+          "mandat_en_cours",
+          "client_est_syndic",
+          "importe_le"
+        ],
+        "title": "Site"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      }
+    },
+    "securitySchemes": {
+      "OAuth2PasswordBearer": {
+        "type": "oauth2",
+        "flows": {
+          "password": {
+            "scopes": {
+              "referentiel": "Lecture des clients, sites et copropriétés",
+              "contacts": "Lecture des contacts des clients (données personnelles)"
+            },
+            "tokenUrl": "auth/jeton"
+          }
+        }
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "authentification",
+      "description": "Obtention d'un jeton d'accès"
+    },
+    {
+      "name": "clients",
+      "description": "Clients vérifiés (SIRET, état administratif)"
+    },
+    {
+      "name": "sites",
+      "description": "Sites géocodés et rapprochés des copropriétés"
+    },
+    {
+      "name": "coproprietes",
+      "description": "Copropriétés du registre national (ANAH)"
+    },
+    {
+      "name": "contacts",
+      "description": "Contacts des clients — données personnelles"
+    },
+    {
+      "name": "supervision",
+      "description": "État du service"
+    }
+  ]
+}

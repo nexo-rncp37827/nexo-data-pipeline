@@ -35,6 +35,8 @@ jobs:
       - run: uv run ruff check .
       - run: uv run ruff format --check .
       - run: uv run pytest --cov=referentiel --cov-report=term-missing
+      - name: La spécification OpenAPI versionnée est à jour
+        run: uv run python -m referentiel.api.exporter_openapi --verifier
 
   image:
     name: Image Docker
@@ -50,3 +52,4 @@ jobs:
           docker run --rm referentiel:ci python -m referentiel.agreger --help
           docker run --rm referentiel:ci python -m referentiel.importer --help
           docker run --rm referentiel:ci python -m referentiel.purger --help
+          docker run --rm referentiel:ci python -c "from referentiel.api.app import app; assert app.openapi()['paths']"

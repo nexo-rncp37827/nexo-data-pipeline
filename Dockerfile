@@ -11,3 +11,4 @@ COPY sql ./sql
 
 RUN useradd --uid 10001 --create-home pipeline && mkdir -p /app/data && chown pipeline /app/data
 USER pipeline
+EXPOSE 8000
