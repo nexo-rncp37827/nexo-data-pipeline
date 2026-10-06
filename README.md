@@ -139,18 +139,25 @@ Listes paginées : paramètres `limite` (1 à 500, 100 par défaut) et `decalage
 ### Installation de l'API
 
 1. La base est installée (section précédente) et alimentée par un import.
-2. Compléter `.env` :
+2. Compléter `.env` (les commandes écrivent directement dans le fichier ; aucun secret ne s'affiche) :
    ```bash
-   docker compose --profile api run --rm api python -m referentiel.api.secret jwt
-   openssl rand -hex 24          # secret de l'application cliente, à lui transmettre
-   docker compose --profile api run --rm api python -m referentiel.api.secret client nexo referentiel contacts
+   # adresse de la base pour le compte en lecture seule de l'API
+   echo "REFERENTIEL_API_DATABASE_URL=postgresql://referentiel_api:$(grep '^REFERENTIEL_API_PASSWORD=' .env | cut -d= -f2)@referentiel-db:5432/referentiel" >> .env
+   # secret de signature des jetons
+   docker compose --profile api run --rm -T api python -m referentiel.api.secret jwt >> .env
+   # secret de l'application cliente : le noter dans un gestionnaire de mots de passe et le lui transmettre
+   openssl rand -hex 24
+   read -s SECRET                # coller le secret, puis Entrée (rien ne s'affiche)
+   # empreinte du secret (jamais le secret lui-même), une seule ligne API_CLIENTS
+   sed -i '/^API_CLIENTS=/d' .env
+   printf '%s\n' "$SECRET" | docker compose --profile api run --rm -T api python -m referentiel.api.secret client nexo referentiel contacts >> .env
+   chmod 600 .env
    ```
-   Copier `API_JWT_SECRET=…` et `API_CLIENTS='…'` dans `.env`, ainsi que `REFERENTIEL_API_DATABASE_URL` (compte `referentiel_api`). Puis `chmod 600 .env`.
+   Contrôle : `grep -c '^API_CLIENTS=' .env` doit afficher `1`. Sans application déclarée, l'API refuse toute demande de jeton (401 « Identifiants invalides »). Après toute modification de `.env`, recréer le conteneur : `docker compose --profile api up -d --force-recreate api`.
 3. Lancer : `docker compose --profile api up -d --build api`.
 4. Vérifier : `curl -s http://127.0.0.1:8010/sante` doit renvoyer `{"statut":"ok","base":"ok"}`.
-5. Appel authentifié :
+5. Appel authentifié (`SECRET` saisi à l'étape 2) :
    ```bash
-   read -s SECRET
    JETON=$(curl -s -X POST http://127.0.0.1:8010/auth/jeton -d "username=nexo&password=$SECRET" | python3 -c "import sys, json; print(json.load(sys.stdin)['access_token'])")
    curl -s -H "Authorization: Bearer $JETON" "http://127.0.0.1:8010/clients?limite=2"
    ```
