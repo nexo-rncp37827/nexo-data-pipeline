@@ -9,7 +9,7 @@ Produit dans le cadre de la certification RNCP37827 — Développeur en Intellig
 
 | Script | Compétence |
 |---|---|
-| `extract_api.py` | C1 — Extraction API REST (API SIRENE gouv.fr) |
+| `extract_api.py` | C1 — Extraction API REST (API Adresse gouv.fr — géocodage) |
 | `generate_excel_template.py` | C1 — Génération template Excel import Nexo (Clients + Salariés) |
 | `extract_scraping.py` | C1 — Extraction scraping (tarifs fournitures) |
 | `extract_bdd.py` | C1 + C2 — Extraction PostgreSQL Nexo + requêtes SQL |
@@ -23,7 +23,7 @@ Produit dans le cadre de la certification RNCP37827 — Développeur en Intellig
 
 - Python 3.12+ avec `uv`
 - PostgreSQL 16 (instance Nexo locale)
-- Accès internet pour API SIRENE et scraping
+- Accès internet pour API Adresse et scraping
 
 ---
 
@@ -57,7 +57,7 @@ DATABASE_URL=postgresql://user:password@localhost:5432/nexo
 ### 1. Extraction des données (C1)
 
 ```powershell
-# API SIRENE — validation SIRET clients
+# API Adresse — géocodage des adresses de sites clients
 uv run python extract_api.py
 
 # Template Excel — générer le fichier à remplir par Foxabrille
@@ -105,7 +105,7 @@ Supprime les entrées `audit_logs` dont `created_at < NOW() - 1 an`.
 nexo-data-pipeline/
 ├── data/
 │   ├── raw/              ← données brutes extraites
-│   │   ├── sirene.csv
+│   │   ├── adresses_geocodees.csv
 │   │   ├── salaries_legacy.csv
 │   │   ├── tarifs_scraping.csv
 │   │   └── nexo_export.csv
@@ -134,7 +134,7 @@ Chaque requête est commentée avec : objectif, colonnes sélectionnées, jointu
 
 ## Choix techniques
 
-- **API SIRENE** (api.insee.fr) : gratuite, sans clé, données officielles — validation des SIRET clients
+- **API Adresse** (api-adresse.data.gouv.fr) : gratuite, sans clé, données officielles (Base Adresse Nationale) — géocodage des adresses de sites clients
 - **openpyxl / pandas** : génération du template Excel import Nexo (deux onglets, lignes d'exemple)
 - **pandas** : nettoyage et normalisation des données (dédoublonnage, formats dates/téléphones)
 - **psycopg2-binary** : connexion PostgreSQL directe pour extraction et import
