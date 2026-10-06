@@ -32,5 +32,19 @@ services:
         condition: service_healthy
     profiles: ["pipeline"]
 
+  api:
+    build: .
+    env_file: .env
+    command: ["uvicorn", "referentiel.api.app:app", "--host", "0.0.0.0", "--port", "8000"]
+    # Port publié sur la machine uniquement (pas d'exposition directe sur Internet)
+    ports:
+      - "127.0.0.1:8010:8000"
+    depends_on:
+      referentiel-db:
+        condition: service_healthy
+    read_only: true
+    restart: unless-stopped
+    profiles: ["api"]
+
 volumes:
   referentiel_pgdata:

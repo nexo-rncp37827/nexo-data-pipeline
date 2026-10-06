@@ -4,8 +4,6 @@ Chaîne de données de la **partie clientèle** de Nexo, l'ERP de Foxabrille Net
 
 Projet de l'épreuve E1 du titre Développeur en intelligence artificielle (RNCP37827, compétences C1 à C5).
 
-> Dépôt en reconstruction (octobre 2026). La section « API » arrive avec le lot correspondant.
-
 ## Sources
 
 | Source | Type | Contenu |
@@ -73,7 +71,7 @@ Modèle Merise (MCD, MLD, MPD) et choix de la base : [`docs/MODELE_DONNEES.md`](
 
 ### Dépendances
 
-Docker et Docker Compose (base PostgreSQL 16, image officielle) ; l'image du pipeline contient Python 3.12 et les dépendances figées dans `uv.lock` (`pandas`, `psycopg`).
+Docker et Docker Compose (base PostgreSQL 16, image officielle) ; l'image du pipeline et de l'API contient Python 3.12 et les dépendances figées dans `uv.lock` (`pandas`, `psycopg`, `httpx`, `fastapi`, `uvicorn`, `pyjwt`).
 
 ### Installation de la base
 
@@ -105,6 +103,60 @@ crontab -e
 10 4 * * 1 bash /home/ubuntu/nexo-data-pipeline/scripts/chaine_hebdomadaire.sh
 ```
 
+## API REST (C5)
+
+API en **lecture seule** qui met le référentiel à disposition des applications internes (FastAPI, standard **OpenAPI 3.1**). Spécification complète : [`docs/openapi.json`](docs/openapi.json) (régénérée par `python -m referentiel.api.exporter_openapi`, vérifiée par la CI) ; documentation interactive sur `/docs` une fois l'API lancée.
+
+### Endpoints
+
+| Méthode | Chemin | Rôle | Portées requises |
+|---|---|---|---|
+| POST | `/auth/jeton` | Obtenir un jeton d'accès | — (identifiant + secret) |
+| GET | `/clients` | Lister les clients (filtres : `type_client`, `verification_siret`, `etat_etablissement`) | `referentiel` |
+| GET | `/clients/{client_id}` | Lire un client | `referentiel` |
+| GET | `/clients/{client_id}/sites` | Sites d'un client | `referentiel` |
+| GET | `/clients/{client_id}/contacts` | Contacts d'un client | `referentiel` + `contacts` |
+| GET | `/sites` | Lister les sites (filtres : `client_id`, `code_postal`, `geocodage`, `rapprochement_copropriete`, `client_est_syndic`) | `referentiel` |
+| GET | `/sites/{site_id}` | Lire un site (avec `client_est_syndic`, calculé par la vue `v_site`) | `referentiel` |
+| GET | `/sites/{site_id}/contacts` | Contacts qui suivent un site | `referentiel` + `contacts` |
+| GET | `/coproprietes` | Lister les copropriétés rapprochées | `referentiel` |
+| GET | `/coproprietes/{numero_immatriculation}` | Lire une copropriété | `referentiel` |
+| GET | `/contacts` | Lister les contacts (filtre : `client_id`) | `referentiel` + `contacts` |
+| GET | `/contacts/{contact_id}` | Lire un contact (avec les sites suivis) | `referentiel` + `contacts` |
+| GET | `/sante` | État du service, sans donnée | aucune |
+
+Listes paginées : paramètres `limite` (1 à 500, 100 par défaut) et `decalage` ; réponse `{total, limite, decalage, elements}`.
+
+### Authentification et autorisation
+
+- **Qui peut appeler l'API** : uniquement les applications déclarées dans `API_CLIENTS` (identifiant, **empreinte scrypt** du secret, portées). Le secret n'est jamais stocké en clair.
+- **Jeton** : `POST /auth/jeton` (formulaire OAuth2 : `username` = identifiant, `password` = secret, `scope` facultatif) renvoie un **JWT signé HS256**, valable **30 minutes** (`API_JWT_MINUTES`, 60 au plus), avec émetteur, audience et portées. Il se passe dans l'en-tête `Authorization: Bearer <jeton>`.
+- **Portées** : `referentiel` (clients, sites, copropriétés) ; `contacts` en plus pour les données personnelles des contacts (traitement T1 du registre). Une application n'obtient que les portées qui lui sont accordées.
+- **Réponses** : 401 sans jeton, jeton invalide, falsifié ou expiré ; 403 portée insuffisante ; 404 ressource introuvable ; 503 base injoignable. Toute méthode d'écriture renvoie 405.
+- **Lecture seule à deux niveaux** : l'API n'expose que des `GET`, et se connecte avec le compte PostgreSQL `referentiel_api`, qui n'a que le droit `SELECT` (transactions en lecture seule par défaut).
+- **Exposition** : port publié sur `127.0.0.1` uniquement ; la base n'est jamais exposée.
+
+### Installation de l'API
+
+1. La base est installée (section précédente) et alimentée par un import.
+2. Compléter `.env` :
+   ```bash
+   docker compose --profile api run --rm api python -m referentiel.api.secret jwt
+   openssl rand -hex 24          # secret de l'application cliente, à lui transmettre
+   docker compose --profile api run --rm api python -m referentiel.api.secret client nexo referentiel contacts
+   ```
+   Copier `API_JWT_SECRET=…` et `API_CLIENTS='…'` dans `.env`, ainsi que `REFERENTIEL_API_DATABASE_URL` (compte `referentiel_api`). Puis `chmod 600 .env`.
+3. Lancer : `docker compose --profile api up -d --build api`.
+4. Vérifier : `curl -s http://127.0.0.1:8010/sante` doit renvoyer `{"statut":"ok","base":"ok"}`.
+5. Appel authentifié :
+   ```bash
+   read -s SECRET
+   JETON=$(curl -s -X POST http://127.0.0.1:8010/auth/jeton -d "username=nexo&password=$SECRET" | python3 -c "import sys, json; print(json.load(sys.stdin)['access_token'])")
+   curl -s -H "Authorization: Bearer $JETON" "http://127.0.0.1:8010/clients?limite=2"
+   ```
+
+Tests : `tests/test_api_securite.py` (authentification, portées, jetons expirés ou falsifiés, lecture seule, spécification complète) et `tests/test_integration_api.py` (API branchée sur une vraie base créée par le MPD, avec le compte `referentiel_api`).
+
 ## Données et confidentialité
 
 Aucune donnée n'est versionnée : le dossier `data/` est exclu de Git. Les données réelles sont traitées sur le serveur de Nexo ; le développement et la démonstration utilisent des données fictives.
@@ -119,6 +171,7 @@ cd nexo-data-pipeline
 cp .env.example .env          # puis compléter les mots de passe
 docker compose up -d referentiel-db
 docker compose --profile pipeline build pipeline
+docker compose --profile api up -d --build api
 ```
 
 ## Tests
