@@ -1,0 +1,74 @@
+// Modèle physique des données (PostgreSQL 16) — rendu : dot -Tpng mpd.dot -o mpd.png
+// Source de vérité : sql/referentiel/01_schema.sql
+digraph MPD {
+  graph [rankdir=LR, fontname="Arial", nodesep=0.5, ranksep=1.0, pad=0.3, bgcolor="white"];
+  node  [shape=plain, fontname="Arial", fontsize=10];
+  edge  [color="#1B3D6E", arrowhead=crow, arrowtail=none, fontname="Arial", fontsize=9];
+
+  client [label=<<table border="1" cellborder="0" cellspacing="0" cellpadding="3" color="#1B3D6E">
+    <tr><td bgcolor="#E6F4F2" colspan="2"><b>client</b></td></tr>
+    <tr><td align="left"><b>client_id</b> (PK)</td><td align="left">integer</td></tr>
+    <tr><td align="left">nom</td><td align="left">varchar(255) NOT NULL</td></tr>
+    <tr><td align="left">type_client</td><td align="left">varchar(30) CHECK</td></tr>
+    <tr><td align="left">statut</td><td align="left">varchar(30)</td></tr>
+    <tr><td align="left">siret / siren</td><td align="left">char(14) / char(9) CHECK</td></tr>
+    <tr><td align="left">verification_siret</td><td align="left">varchar(20) CHECK</td></tr>
+    <tr><td align="left">denomination_officielle</td><td align="left">varchar(255)</td></tr>
+    <tr><td align="left">similarite_nom</td><td align="left">numeric(4,3)</td></tr>
+    <tr><td align="left">etat_etablissement</td><td align="left">varchar(10) CHECK</td></tr>
+    <tr><td align="left">activite_principale, nature_juridique</td><td align="left">varchar(10)</td></tr>
+    <tr><td align="left">adresse, code_postal, ville</td><td align="left">varchar / char(5)</td></tr>
+    <tr><td align="left">date_creation, date_mise_a_jour</td><td align="left">date</td></tr>
+    <tr><td align="left">importe_le</td><td align="left">timestamptz</td></tr></table>>];
+
+  copropriete [label=<<table border="1" cellborder="0" cellspacing="0" cellpadding="3" color="#1B3D6E">
+    <tr><td bgcolor="#E6F4F2" colspan="2"><b>copropriete</b></td></tr>
+    <tr><td align="left"><b>numero_immatriculation</b> (PK)</td><td align="left">varchar(20)</td></tr>
+    <tr><td align="left">adresse, nom_usage</td><td align="left">varchar</td></tr>
+    <tr><td align="left">nombre_total_lots, nombre_lots_habitation</td><td align="left">integer ≥ 0</td></tr>
+    <tr><td align="left">type_syndic, syndic_raison_sociale</td><td align="left">varchar</td></tr>
+    <tr><td align="left">syndic_siret</td><td align="left">char(14) CHECK</td></tr>
+    <tr><td align="left">mandat_en_cours</td><td align="left">varchar(30)</td></tr>
+    <tr><td align="left">importe_le</td><td align="left">timestamptz</td></tr></table>>];
+
+  site [label=<<table border="1" cellborder="0" cellspacing="0" cellpadding="3" color="#1B3D6E">
+    <tr><td bgcolor="#E6F4F2" colspan="2"><b>site</b></td></tr>
+    <tr><td align="left"><b>site_id</b> (PK)</td><td align="left">integer</td></tr>
+    <tr><td align="left" port="c"><i>client_id</i> (FK, index)</td><td align="left">integer NOT NULL</td></tr>
+    <tr><td align="left" port="co"><i>numero_immatriculation</i> (FK, index)</td><td align="left">varchar(20)</td></tr>
+    <tr><td align="left">nom, adresse_saisie, code_postal_saisi, ville_saisie</td><td align="left">varchar / char(5)</td></tr>
+    <tr><td align="left">adresse_normalisee, numero, voie</td><td align="left">varchar</td></tr>
+    <tr><td align="left">code_postal (index), code_insee, commune</td><td align="left">char(5) / varchar</td></tr>
+    <tr><td align="left">latitude, longitude</td><td align="left">numeric(9,6) CHECK</td></tr>
+    <tr><td align="left">score_geocodage, geocodage</td><td align="left">numeric(4,3) / varchar CHECK</td></tr>
+    <tr><td align="left">date_debut_contrat, date_fin_contrat</td><td align="left">date CHECK fin ≥ début</td></tr>
+    <tr><td align="left">rapprochement_copropriete</td><td align="left">varchar(20) CHECK</td></tr>
+    <tr><td align="left">distance_copropriete_m, immatriculations_candidates</td><td align="left">numeric / varchar</td></tr>
+    <tr><td align="left">importe_le</td><td align="left">timestamptz</td></tr></table>>];
+
+  contact [label=<<table border="1" cellborder="0" cellspacing="0" cellpadding="3" color="#1B3D6E">
+    <tr><td bgcolor="#E6F4F2" colspan="2"><b>contact</b> [données personnelles]</td></tr>
+    <tr><td align="left"><b>contact_id</b> (PK)</td><td align="left">integer</td></tr>
+    <tr><td align="left"><i>client_id</i> (FK, index, cascade)</td><td align="left">integer NOT NULL</td></tr>
+    <tr><td align="left">nom, role, poste</td><td align="left">varchar</td></tr>
+    <tr><td align="left">email</td><td align="left">varchar(255) CHECK</td></tr>
+    <tr><td align="left">telephone_fixe, telephone_portable</td><td align="left">varchar(16) CHECK E.164</td></tr>
+    <tr><td align="left">importe_le</td><td align="left">timestamptz</td></tr></table>>];
+
+  contact_site [label=<<table border="1" cellborder="0" cellspacing="0" cellpadding="3" color="#1B3D6E">
+    <tr><td bgcolor="#E6F4F2" colspan="2"><b>contact_site</b></td></tr>
+    <tr><td align="left"><b><i>contact_id</i></b> (PK, FK, cascade)</td><td align="left">integer</td></tr>
+    <tr><td align="left"><b><i>site_id</i></b> (PK, FK, index, cascade)</td><td align="left">integer</td></tr></table>>];
+
+  import [label=<<table border="1" cellborder="0" cellspacing="0" cellpadding="3" color="#6B7C9B">
+    <tr><td bgcolor="#F4FCFB" colspan="2"><b>import</b> (journal)</td></tr>
+    <tr><td align="left"><b>import_id</b> (PK)</td><td align="left">serial</td></tr>
+    <tr><td align="left">extraction, debut, fin, statut</td><td align="left">varchar / timestamptz</td></tr>
+    <tr><td align="left">nb_* (compteurs)</td><td align="left">integer</td></tr></table>>];
+
+  client -> site [label="1 → n"];
+  copropriete -> site [label="0..1 → n"];
+  client -> contact [label="1 → n"];
+  contact -> contact_site [label="1 → n"];
+  site -> contact_site [label="1 → n"];
+}

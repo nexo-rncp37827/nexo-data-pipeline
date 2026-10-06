@@ -6,8 +6,13 @@ services:
       POSTGRES_DB: referentiel
       POSTGRES_USER: referentiel
       POSTGRES_PASSWORD: ${REFERENTIEL_DB_PASSWORD:?REFERENTIEL_DB_PASSWORD manquant dans .env}
+      # Comptes de moindre privilège créés à l'initialisation (sql/referentiel/02_roles.sh)
+      REFERENTIEL_IMPORT_PASSWORD: ${REFERENTIEL_IMPORT_PASSWORD:?REFERENTIEL_IMPORT_PASSWORD manquant dans .env}
+      REFERENTIEL_API_PASSWORD: ${REFERENTIEL_API_PASSWORD:?REFERENTIEL_API_PASSWORD manquant dans .env}
     volumes:
       - referentiel_pgdata:/var/lib/postgresql/data
+      # MPD et comptes appliqués automatiquement à la création de la base (volume vide)
+      - ./sql/referentiel:/docker-entrypoint-initdb.d:ro
     ports:
       - "127.0.0.1:5433:5432"
     healthcheck:

@@ -4,7 +4,7 @@ Chaîne de données de la **partie clientèle** de Nexo, l'ERP de Foxabrille Net
 
 Projet de l'épreuve E1 du titre Développeur en intelligence artificielle (RNCP37827, compétences C1 à C5).
 
-> Dépôt en reconstruction (octobre 2026). Ce README est complété à chaque étape : les sections « Base de données et import » et « API » arrivent avec les lots correspondants.
+> Dépôt en reconstruction (octobre 2026). La section « API » arrive avec le lot correspondant.
 
 ## Sources
 
@@ -65,6 +65,44 @@ Nettoyage, homogénéisation des formats et fusion des trois sources en un réf�
 
 ```bash
 docker compose -f docker-compose.yml -f docker-compose.serveur.yml --profile pipeline run --rm pipeline python -m referentiel.agreger
+```
+
+## Base de données et import (C4)
+
+Modèle Merise (MCD, MLD, MPD) et choix de la base : [`docs/MODELE_DONNEES.md`](docs/MODELE_DONNEES.md). Registre des traitements et procédures de tri : [`docs/RGPD.md`](docs/RGPD.md).
+
+### Dépendances
+
+Docker et Docker Compose (base PostgreSQL 16, image officielle) ; l'image du pipeline contient Python 3.12 et les dépendances figées dans `uv.lock` (`pandas`, `psycopg`).
+
+### Installation de la base
+
+1. Renseigner dans `.env` (voir `.env.example`) `REFERENTIEL_DB_PASSWORD`, `REFERENTIEL_IMPORT_PASSWORD`, `REFERENTIEL_API_PASSWORD` (`openssl rand -hex 24`) et `REFERENTIEL_DATABASE_URL` (compte `referentiel_import`).
+2. Créer la base : `docker compose up -d referentiel-db`. Au premier démarrage (volume vide), PostgreSQL exécute `sql/referentiel/01_schema.sql` (MPD) puis `02_roles.sh` (comptes).
+3. Vérifier : `docker compose exec referentiel-db psql -U referentiel -d referentiel -c "\dt"` (6 tables).
+
+Pour recréer la base de zéro : `docker compose down -v` puis l'étape 2 (supprime le volume et donc les données du référentiel, qui seront réimportées).
+
+### Script d'import
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.serveur.yml --profile pipeline run --rm pipeline python -m referentiel.importer [--propre data/propre/<horodatage>]
+```
+
+- **Entrée** : le dernier référentiel agrégé (`data/propre/<horodatage>/`).
+- **Traitement**, dans une seule transaction : insertion ou mise à jour des copropriétés, clients, sites, contacts et associations ; suppression de ce qui n'existe plus dans la source (P1) ; contacts en fin de conservation écartés (P2) ; ligne de journal dans la table `import`.
+- **Rejouable** : importer deux fois le même dossier ne change rien. En cas d'erreur (donnée refusée par une contrainte, base injoignable), rien n'est modifié et le journal garde un import « echec ».
+- **Codes de sortie** : 0 réussi, 1 échec (base inchangée), 2 configuration ou dossier manquant.
+- **Tests** : `tests/test_integration_referentiel.py` (création de la base, import, idempotence, synchronisation, annulation, droits des comptes), exécutés en CI.
+
+### Tri et chaîne hebdomadaire
+
+`python -m referentiel.purger` applique les procédures P3 et P4. La chaîne complète (extraction, agrégation, import, tri) est planifiée sur le serveur :
+
+```bash
+crontab -e
+# ajouter la ligne :
+10 4 * * 1 bash /home/ubuntu/nexo-data-pipeline/scripts/chaine_hebdomadaire.sh
 ```
 
 ## Données et confidentialité

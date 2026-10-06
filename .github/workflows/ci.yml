@@ -48,3 +48,5 @@ jobs:
           docker run --rm referentiel:ci python -c "from referentiel.extraction import nexo; [nexo.lire_requete(f) for f in nexo.REQUETES.values()]"
           docker run --rm referentiel:ci python -m referentiel.extraire --help
           docker run --rm referentiel:ci python -m referentiel.agreger --help
+          docker run --rm referentiel:ci python -m referentiel.importer --help
+          docker run --rm referentiel:ci python -m referentiel.purger --help

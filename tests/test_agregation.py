@@ -60,6 +60,10 @@ def geo(site_id, lat=LAT, lon=LON, score="0.95", statut="ok", type_="housenumber
 
 @pytest.fixture
 def sources():
+    return sources_fictives()
+
+
+def sources_fictives():
     return {
         "nexo_clients": df(
             [

@@ -1,0 +1,42 @@
+// Modèle conceptuel des données (Merise) du référentiel clients — rendu : dot -Tpng mcd.dot -o mcd.png
+graph MCD {
+  graph [rankdir=LR, fontname="Arial", nodesep=0.6, ranksep=0.9, pad=0.3, bgcolor="white"];
+  node  [fontname="Arial", fontsize=11];
+  edge  [fontname="Arial", fontsize=11, color="#1B3D6E"];
+
+  CLIENT [shape=plain, label=<<table border="1" cellborder="0" cellspacing="0" cellpadding="4" color="#1B3D6E">
+    <tr><td bgcolor="#E6F4F2"><b>CLIENT</b></td></tr>
+    <tr><td align="left"><u>id client</u><br align="left"/>nom<br align="left"/>type de client<br align="left"/>statut<br align="left"/>SIRET<br align="left"/>SIREN<br align="left"/>vérification du SIRET<br align="left"/>dénomination officielle<br align="left"/>similarité du nom<br align="left"/>état de l'établissement<br align="left"/>activité principale<br align="left"/>nature juridique<br align="left"/>adresse, code postal, ville<br align="left"/>dates de création, de mise à jour<br align="left"/></td></tr></table>>];
+
+  SITE [shape=plain, label=<<table border="1" cellborder="0" cellspacing="0" cellpadding="4" color="#1B3D6E">
+    <tr><td bgcolor="#E6F4F2"><b>SITE</b></td></tr>
+    <tr><td align="left"><u>id site</u><br align="left"/>nom<br align="left"/>adresse, code postal, ville saisis<br align="left"/>adresse normalisée, numéro, voie<br align="left"/>code postal, code INSEE, commune<br align="left"/>latitude, longitude<br align="left"/>score et qualité du géocodage<br align="left"/>dates de début, de fin de contrat<br align="left"/>statut du rapprochement<br align="left"/>distance à la copropriété<br align="left"/>immatriculations candidates<br align="left"/></td></tr></table>>];
+
+  COPRO [shape=plain, label=<<table border="1" cellborder="0" cellspacing="0" cellpadding="4" color="#1B3D6E">
+    <tr><td bgcolor="#E6F4F2"><b>COPROPRIÉTÉ</b></td></tr>
+    <tr><td align="left"><u>numéro d'immatriculation</u><br align="left"/>adresse<br align="left"/>nom d'usage<br align="left"/>nombre total de lots<br align="left"/>nombre de lots d'habitation<br align="left"/>type de syndic<br align="left"/>raison sociale du syndic<br align="left"/>SIRET du syndic<br align="left"/>mandat en cours<br align="left"/></td></tr></table>>];
+
+  CONTACT [shape=plain, label=<<table border="1" cellborder="0" cellspacing="0" cellpadding="4" color="#1B3D6E">
+    <tr><td bgcolor="#E6F4F2"><b>CONTACT</b></td></tr>
+    <tr><td align="left"><u>id contact</u><br align="left"/>nom<br align="left"/>rôle<br align="left"/>poste<br align="left"/>e-mail<br align="left"/>téléphone fixe<br align="left"/>téléphone portable<br align="left"/></td></tr></table>>];
+
+  IMPORT [shape=plain, label=<<table border="1" cellborder="0" cellspacing="0" cellpadding="4" color="#6B7C9B">
+    <tr><td bgcolor="#F4FCFB"><b>IMPORT</b></td></tr>
+    <tr><td align="left"><u>id import</u><br align="left"/>extraction source<br align="left"/>début, fin<br align="left"/>nombres de lignes importées, supprimées<br align="left"/>statut<br align="left"/></td></tr></table>>];
+
+  node [shape=ellipse, style=filled, fillcolor="#F4FCFB", color="#2A9D92"];
+  POSSEDER [label="POSSÉDER"];
+  TRAVAILLER [label="TRAVAILLER POUR"];
+  SUIVRE [label="SUIVRE"];
+  CORRESPONDRE [label="CORRESPONDRE À"];
+
+  CLIENT -- POSSEDER [label="0,n"];
+  POSSEDER -- SITE [label="1,1"];
+  CLIENT -- TRAVAILLER [label="0,n"];
+  TRAVAILLER -- CONTACT [label="1,1"];
+  CONTACT -- SUIVRE [label="0,n"];
+  SUIVRE -- SITE [label="0,n"];
+  SITE -- CORRESPONDRE [label="0,1"];
+  CORRESPONDRE -- COPRO [label="1,n"];
+  { rank=same; CLIENT; IMPORT; }
+}
