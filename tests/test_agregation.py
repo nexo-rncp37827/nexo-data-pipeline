@@ -269,6 +269,7 @@ def test_referentiel_complet(sources):
     assert bool(s10["client_est_syndic"]) is True and s10["date_debut_contrat"] == "2024-04-01"
     assert sites.loc[11, "geocodage"] == "echec"
     assert sites.loc[11, "rapprochement_copropriete"] == "non_evalue"
+    assert s10["adresse_copropriete"] == "10 Rue de l'Exemple"
     assert sites.loc[11, "adresse_saisie"] == "rue inconnue"
 
     contacts = tables["contacts"].set_index("contact_id")
@@ -280,12 +281,12 @@ def test_referentiel_complet(sources):
     assert ("clients", "identifiant ou nom absent") in motifs
     assert ("sites", "client inexistant ou écarté") in motifs
     assert ("sites", "ni adresse ni code postal") in motifs
-    assert ("contacts", "doublon (même client, même nom, même coordonnée)") in motifs
+    assert ("contacts", "doublon (même client, même personne, même site)") in motifs
     assert ("contacts", "aucune coordonnée valide") in motifs
     assert ("contacts", "nom absent") in motifs
     assert ("registre_coproprietes", "numéro d'immatriculation absent") in motifs
     assert ("registre_coproprietes", "doublon (version la plus récente gardée)") in motifs
-    assert rapport["sorties"] == {"clients": 3, "sites": 2, "contacts": 1}
+    assert rapport["sorties"] == {"clients": 3, "sites": 2, "contacts": 1, "contacts_sites": 0}
     json.dumps(rapport)  # sérialisable
 
 
@@ -363,7 +364,14 @@ def test_qualite_geocodage():
 
 
 def test_incoherence_detectee(sources, monkeypatch):
-    monkeypatch.setattr(a, "contacts", lambda b, c, r: pd.DataFrame({"client_id": [999]}))
+    monkeypatch.setattr(
+        a,
+        "contacts",
+        lambda b, c, s, r: (
+            pd.DataFrame({"client_id": [999], "contact_id": [1]}),
+            pd.DataFrame({"contact_id": [], "site_id": []}),
+        ),
+    )
     with pytest.raises(ValueError, match="incohérent"):
         a.agreger(sources)
 
@@ -416,3 +424,90 @@ def test_entiers_sans_decimale_dans_les_csv(tmp_path, sources):
     tables["sites"].to_csv(tmp_path / "s.csv", index=False)
     texte = (tmp_path / "s.csv").read_text()
     assert ",40," in texte and "40.0" not in texte
+
+
+def test_une_personne_suivant_plusieurs_sites_devient_un_contact_et_des_liens():
+    clients_ = pd.DataFrame({"client_id": [1], "siren": ["123456789"]})
+    sites_ = pd.DataFrame({"site_id": [10, 11]})
+    brut = df(
+        [
+            {
+                "contact_id": "5",
+                "client_id": "1",
+                "site_id": "11",
+                "nom": "Gestionnaire Fictif",
+                "role": "gestionnaire_site",
+                "poste": None,
+                "email": "g@exemple.fr",
+                "telephone_fixe": None,
+                "telephone_portable": None,
+            },
+            {
+                "contact_id": "3",
+                "client_id": "1",
+                "site_id": "10",
+                "nom": "gestionnaire fictif",
+                "role": "gestionnaire_site",
+                "poste": None,
+                "email": "G@exemple.fr",
+                "telephone_fixe": None,
+                "telephone_portable": None,
+            },
+            {
+                "contact_id": "7",
+                "client_id": "1",
+                "site_id": "10",
+                "nom": "Gestionnaire Fictif",
+                "role": "gestionnaire_site",
+                "poste": None,
+                "email": "g@exemple.fr",
+                "telephone_fixe": None,
+                "telephone_portable": None,
+            },
+            {
+                "contact_id": "8",
+                "client_id": "1",
+                "site_id": "99",
+                "nom": "Autre Fictif",
+                "role": "client",
+                "poste": None,
+                "email": "autre@exemple.fr",
+                "telephone_fixe": None,
+                "telephone_portable": None,
+            },
+        ]
+    )
+    rejets = a.Rejets()
+    personnes, liens = a.contacts(brut, clients_, sites_, rejets)
+    assert list(personnes["contact_id"]) == [5, 8]
+    assert sorted(map(tuple, liens.values.tolist())) == [(5, 10), (5, 11)]
+    motifs = {(r["identifiant"], r["motif"]) for r in rejets.lignes}
+    assert (7, "doublon (même client, même personne, même site)") in motifs
+    assert (8, "site inexistant ou écarté") in motifs
+
+
+def test_plusieurs_au_meme_point_departagees_par_l_adresse():
+    voisine = {
+        **copro("BB2", siret=SIRET_SYNDIC_TIERS, adresse="12 Rue de l'Exemple"),
+        "numero_voie_adresse": "12",
+    }
+    r = a.rapprocher(site_fiable(), candidats(copro("AA1", siret=SIRET_SYNDIC_TIERS), voisine), "1")
+    assert (
+        r["rapprochement_copropriete"] == "correspondance" and r["numero_immatriculation"] == "AA1"
+    )
+
+
+def test_geocodage_incertain_rapprochement_a_verifier():
+    r = a.rapprocher(site_fiable(geocodage="a_verifier"), candidats(copro("AA1")), "123456789")
+    assert r["rapprochement_copropriete"] == "a_verifier" and r["numero_immatriculation"] == "AA1"
+
+
+def test_score_adresse_numeros_differents_et_frontiere_de_mot():
+    site = site_fiable()
+    assert a.score_adresse(site, {"adresse_reference": "10 Rue de l'Exemple 69003 Lyon"}) == 1.0
+    assert a.score_adresse(site, {"adresse_reference": "12 Rue de l'Exemple"}) == 0.0
+    assert a.score_adresse(site, {"adresse_reference": "110 Rue de l'Exemple"}) == 0.0
+    assert (
+        a.score_adresse({**site, "numero": None}, {"adresse_reference": "Rue de l'Exemple"}) == 1.0
+    )
+    assert a.numero_principal("10 bis") == "10" and a.numero_principal(None) is None

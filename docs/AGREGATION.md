@@ -1,6 +1,6 @@
 # Agrégation et nettoyage du référentiel clients (C3)
 
-`python -m referentiel.agreger` transforme les données brutes d'une extraction en **un seul jeu de données** : le référentiel clients, composé de trois tables liées par leurs identifiants (clients, sites, contacts), au même format, prêtes pour l'import en base (C4).
+`python -m referentiel.agreger` transforme les données brutes d'une extraction en **un seul jeu de données** : le référentiel clients, composé de quatre tables liées par leurs identifiants (clients, sites, contacts et l'association contacts ↔ sites), au même format, prêtes pour l'import en base (C4).
 
 ## Dépendances et commandes
 
@@ -14,7 +14,7 @@
 
 **Entrée** : par défaut, la dernière extraction **complète** de `data/brut/` (code de sortie 0 dans son manifeste) ; une extraction partielle n'est jamais agrégée. Les fichiers sont lus en texte, pour que les codes postaux, SIRET et numéros de téléphone gardent leurs zéros.
 
-**Sortie** : `data/propre/<horodatage de l'extraction>/` — `clients.csv`, `sites.csv`, `contacts.csv`, `rejets.csv` (une ligne par entrée écartée, avec son motif) et `rapport.json` (comptages par étape). Codes de sortie : 0 référentiel produit, 1 fichier source manquant, 2 aucune extraction complète.
+**Sortie** : `data/propre/<horodatage de l'extraction>/` — `clients.csv`, `sites.csv`, `contacts.csv`, `contacts_sites.csv`, `rejets.csv` (une ligne par entrée écartée, avec son motif) et `rapport.json` (comptages par étape). Codes de sortie : 0 référentiel produit, 1 fichier source manquant, 2 aucune extraction complète.
 
 ## Enchaînement
 
@@ -23,8 +23,8 @@
 | 1 | Clients : nettoyage, contrôle du SIRET, jointure du résultat de l'API Recherche d'entreprises | `agregation.clients` |
 | 2 | Registre des copropriétés : dédoublonnage, normalisation des codes postaux, coordonnées, SIRET du syndic, nombres de lots | `agregation.coproprietes` |
 | 3 | Sites : nettoyage, jointure du géocodage, qualité de l'adresse, rapprochement avec la copropriété | `agregation.sites`, `agregation.rapprocher` |
-| 4 | Contacts : nettoyage des coordonnées, rattachement au client, dédoublonnage | `agregation.contacts` |
-| 5 | Contrôle de cohérence : tout site et tout contact pointe vers un client présent ; sinon arrêt | `agregation.agreger` |
+| 4 | Contacts : nettoyage des coordonnées, rattachement au client, fusion des lignes d'une même personne et association à ses sites | `agregation.contacts` |
+| 5 | Contrôle de cohérence : tout site et tout contact pointe vers un client présent, toute association vers un contact et un site présents ; sinon arrêt | `agregation.agreger` |
 
 ## Homogénéisation des formats
 
@@ -50,7 +50,8 @@
 | Sites | ni adresse ni code postal | Impossible à localiser ou à vérifier |
 | Contacts | nom absent ; client inexistant | Inutilisable |
 | Contacts | aucune coordonnée valide | Ni e-mail ni téléphone exploitable : rien à conserver (minimisation) |
-| Contacts | doublon (même client, même nom, même coordonnée) | Premier gardé |
+| Contacts | doublon (même client, même personne, même site) | Ligne strictement redondante |
+| Association contact ↔ site | site inexistant ou écarté | Lien vers un site absent du référentiel |
 | Registre | numéro d'immatriculation absent | Copropriété non identifiable |
 | Registre | doublon | Version la plus récente (`date_derniere_maj`) gardée |
 
@@ -62,19 +63,24 @@ Une donnée invalide qui n'empêche pas d'utiliser la ligne (SIRET à la clé fa
 
 **Adresse des sites.** `geocodage` vaut `fiable` si l'API a trouvé le numéro exact avec un score d'au moins 0,7 : l'adresse normalisée, le code commune INSEE et les coordonnées remplacent alors la saisie (gardée dans `adresse_saisie`). Sinon `a_verifier` (rue seule ou score faible) ou `echec` : la saisie est conservée et le site signalé.
 
-**Rapprochement avec le registre des copropriétés** (sites au géocodage fiable, candidates du même code postal) :
+**Contacts : une personne, plusieurs sites.** Dans Nexo, une même personne (le gestionnaire d'une régie, par exemple) est enregistrée une fois par site qu'elle suit. Les lignes d'une même personne (même client, même nom normalisé, même coordonnée principale) sont fusionnées en un seul contact, relié à chacun de ses sites dans `contacts_sites` : la personne n'est stockée qu'une fois (minimisation, mise à jour unique) sans perdre ses rattachements. Constat sur les données réelles du 06/10/2026 : 50 des 162 lignes de contacts de Nexo étaient des répétitions d'une même personne.
+
+**Rapprochement avec le registre des copropriétés** (sites géocodés, candidates du même code postal) :
 
 | Situation | Statut |
 |---|---|
 | Une copropriété à moins de 15 m, ou à moins de 50 m avec une adresse identique (similarité ≥ 0,85) | `correspondance` |
-| Plusieurs dans ce cas (syndicat principal et secondaires d'une même résidence) | `correspondance` si une seule a pour syndic le client, sinon `ambigu` (numéros candidats listés) |
+| Plusieurs dans ce cas (immeubles voisins, syndicat principal et secondaires) | `correspondance` si une seule a pour syndic le client, ou à défaut une seule a exactement l'adresse du site ; sinon `ambigu` (numéros candidats listés) |
+| Géocodage du site `a_verifier` (rue seule ou score faible) | Même recherche, mais le statut est plafonné à `a_verifier` |
 | Seulement des copropriétés à moins de 50 m avec une autre adresse | `a_verifier` (la plus proche, avec sa distance) |
 | Aucune copropriété à moins de 50 m | `aucune` (site qui n'est pas en copropriété immatriculée, ou adresse à corriger) |
-| Géocodage non fiable | `non_evalue` |
+| Adresse du site non géocodée | `non_evalue` |
+
+Comparaison d'adresses : deux numéros de voie différents donnent un score nul (immeubles voisins), quelle que soit la ressemblance du reste ; l'adresse du site doit figurer mot pour mot dans celle de la copropriété (« 10 rue X » ne correspond pas à « 110 rue X »).
 
 Seuils : 15 m correspond à la précision d'un même point d'adresse géocodé (le registre est géocodé sur la même Base Adresse Nationale) ; au-delà de 50 m, il ne s'agit plus du même immeuble.
 
-Pour une correspondance, le référentiel ajoute le numéro d'immatriculation, le nom d'usage, le nombre de lots, le type de syndic, sa raison sociale et son SIRET (syndic professionnel uniquement), le mandat en cours et **`client_est_syndic`**. Cette dernière colonne est une information sur la relation contractuelle, **pas une anomalie** : un syndic peut contracter directement avec Foxabrille ou passer par une régie qui gère le contrat pour lui.
+Pour une correspondance (ou une copropriété à vérifier), le référentiel ajoute le numéro d'immatriculation, l'adresse de la copropriété (pour la vérification humaine), le nom d'usage, le nombre de lots, le type de syndic, sa raison sociale et son SIRET (syndic professionnel uniquement), le mandat en cours et **`client_est_syndic`**. Cette dernière colonne est une information sur la relation contractuelle, **pas une anomalie** : un syndic peut contracter directement avec Foxabrille ou passer par une régie qui gère le contrat pour lui.
 
 ## Limites connues
 
