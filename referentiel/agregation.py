@@ -99,6 +99,13 @@ def entier(valeur):
     return None if n.absent(valeur) else int(float(valeur))
 
 
+def champ(ligne, cle):
+    """Valeur d'une ligne, ou None si absente. Avec pandas 3, une valeur texte manquante est
+    NaN (un nombre) et non None : on ne manipule jamais une valeur sans passer par ici."""
+    valeur = ligne.get(cle)
+    return None if n.absent(valeur) else valeur
+
+
 # ── Clients ──────────────────────────────────────────────────────────────────
 
 
@@ -204,7 +211,9 @@ def rapprocher(site: dict, candidats: list, siren_client: str | None) -> dict:
         # Plusieurs copropriétés au même point (syndicat principal et secondaires) :
         # on garde celle dont le syndic est le client, s'il y en a exactement une.
         meme_syndic = [
-            x for x in certains if (x[3]["siret_representant_legal"] or "")[:9] == siren_client
+            x
+            for x in certains
+            if (champ(x[3], "siret_representant_legal") or "")[:9] == siren_client
         ]
         if len(meme_syndic) == 1:
             certains = meme_syndic
@@ -218,14 +227,14 @@ def rapprocher(site: dict, candidats: list, siren_client: str | None) -> dict:
         }
     else:
         statut, (_, d, _, copro) = "a_verifier", min(notes, key=lambda x: x[1])
-    syndic = copro["siret_representant_legal"]
+    syndic = champ(copro, "siret_representant_legal")
     return {
         "rapprochement_copropriete": statut,
         "distance_copropriete_m": d,
-        "numero_immatriculation": copro["numero_immatriculation"],
+        "numero_immatriculation": champ(copro, "numero_immatriculation"),
         "nom_usage_copropriete": n.texte(copro.get("nom_usage_copropriete")),
-        "nombre_total_lots": copro["nombre_total_lots"],
-        "nombre_lots_habitation": copro["nombre_lots_habitation"],
+        "nombre_total_lots": n.nombre_entier(copro.get("nombre_total_lots")),
+        "nombre_lots_habitation": n.nombre_entier(copro.get("nombre_lots_habitation")),
         "type_syndic": n.texte(copro.get("type_syndic")),
         "syndic_raison_sociale": n.texte(copro.get("raison_sociale_representant_legal")),
         "syndic_siret": syndic,
@@ -261,7 +270,7 @@ def sites(
     siren = dict(zip(table_clients["client_id"], table_clients["siren"], strict=True))
     par_cp = defaultdict(list)
     for _, c in copros.iterrows():
-        if c["code_postal_adresse"]:
+        if champ(c, "code_postal_adresse"):
             par_cp[c["code_postal_adresse"]].append(c)
     lignes = []
     for _, s in brut.iterrows():
@@ -364,6 +373,20 @@ def contacts(brut: pd.DataFrame, table_clients: pd.DataFrame, rejets: Rejets) ->
 # ── Assemblage ───────────────────────────────────────────────────────────────
 
 
+ENTIERS = {"client_id", "site_id", "contact_id", "nombre_total_lots", "nombre_lots_habitation"}
+
+
+def typer(df: pd.DataFrame) -> pd.DataFrame:
+    """Types explicites : entiers « nullables » (40 et non 40.0 dans le CSV), booléens."""
+    df = df.copy()
+    for col in df.columns:
+        if col in ENTIERS:
+            df[col] = pd.array([None if n.absent(v) else int(v) for v in df[col]], dtype="Int64")
+        elif col == "client_est_syndic":
+            df[col] = pd.array([None if n.absent(v) else bool(v) for v in df[col]], dtype="boolean")
+    return df
+
+
 def agreger(sources: dict[str, pd.DataFrame]) -> tuple[dict[str, pd.DataFrame], dict]:
     rejets = Rejets()
     t_clients = clients(sources["nexo_clients"], sources["api_entreprises_clients"], rejets)
@@ -377,6 +400,7 @@ def agreger(sources: dict[str, pd.DataFrame]) -> tuple[dict[str, pd.DataFrame], 
         t_contacts["client_id"]
     ) <= set(t_clients["client_id"]):
         raise ValueError("référentiel incohérent : référence vers un client absent")
+    t_clients, t_sites, t_contacts = typer(t_clients), typer(t_sites), typer(t_contacts)
     t_rejets = rejets.tableau()
     rapport = {
         "entrees": {k: len(v) for k, v in sources.items()},
