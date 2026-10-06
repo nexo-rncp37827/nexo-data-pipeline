@@ -171,3 +171,25 @@ def test_purge_du_journal_des_imports(base, tmp_path, monkeypatch):
     assert purger.main([]) == 0
     with psycopg.connect(base["admin"]) as cnx:
         assert [r[0] for r in cnx.execute("SELECT extraction FROM import")] == ["recent"]
+
+
+def test_textes_longs_du_registre_acceptes(base, tmp_path):
+    """Régression (06/10, données réelles) : texte du registre de plus de 30 caractères."""
+    sources = sources_fictives()
+    long = "Mandat en cours (valeur longue du registre national)"
+    sources["fichier_coproprietes"]["mandat_en_cours"] = long
+    with psycopg.connect(base["import"]) as cnx:
+        importer.importer(cnx, ecrire_referentiel(tmp_path / "a", sources))
+    with psycopg.connect(base["admin"]) as cnx:
+        assert cnx.execute("SELECT mandat_en_cours FROM copropriete").fetchone() == (long,)
+
+
+def test_message_d_erreur_nomme_la_table(base, tmp_path, monkeypatch, caplog):
+    dossier = ecrire_referentiel(tmp_path / "propre" / "x")
+    (dossier / "clients.csv").write_text(
+        (dossier / "clients.csv").read_text().replace("12345678900015", "123")
+    )
+    monkeypatch.setenv("REFERENTIEL_DATABASE_URL", base["import"])
+    monkeypatch.setenv("DOSSIER_DONNEES", str(tmp_path))
+    assert importer.main([]) == 1
+    assert "table client" in caplog.text

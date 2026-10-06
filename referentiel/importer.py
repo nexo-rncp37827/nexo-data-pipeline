@@ -152,8 +152,12 @@ def upsert(cur, table: str, df: pd.DataFrame) -> int:
         f"ON CONFLICT ({', '.join(cles)}) DO UPDATE SET {maj}, importe_le = now()"
     )
     valeurs = lignes(df, cols)
-    if valeurs:
-        cur.executemany(sql, valeurs)
+    try:
+        if valeurs:
+            cur.executemany(sql, valeurs)
+    except psycopg.Error as exc:
+        exc.add_note(f"table {table}")  # le message de PostgreSQL ne nomme pas toujours la table
+        raise
     return len(valeurs)
 
 
@@ -254,7 +258,8 @@ def main(argv: list[str] | None = None) -> int:
         with psycopg.connect(reglages.referentiel_database_url, connect_timeout=10) as cnx:
             bilan = importer(cnx, dossier)
     except (psycopg.Error, FileNotFoundError, ValueError) as exc:
-        journal.error("import annulé, base inchangée : %s", exc)
+        contexte = "; ".join(getattr(exc, "__notes__", []))
+        journal.error("import annulé, base inchangée : %s (%s)", exc, contexte or "—")
         return 1
     journal.info("import réussi depuis %s : %s", dossier.name, bilan)
     return 0

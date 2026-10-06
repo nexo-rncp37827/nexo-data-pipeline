@@ -9,8 +9,8 @@ digraph MPD {
     <tr><td bgcolor="#E6F4F2" colspan="2"><b>client</b></td></tr>
     <tr><td align="left"><b>client_id</b> (PK)</td><td align="left">integer</td></tr>
     <tr><td align="left">nom</td><td align="left">varchar(255) NOT NULL</td></tr>
-    <tr><td align="left">type_client</td><td align="left">varchar(30) CHECK</td></tr>
-    <tr><td align="left">statut</td><td align="left">varchar(30)</td></tr>
+    <tr><td align="left">type_client</td><td align="left">varchar(50) CHECK</td></tr>
+    <tr><td align="left">statut</td><td align="left">varchar(50)</td></tr>
     <tr><td align="left">siret / siren</td><td align="left">char(14) / char(9) CHECK</td></tr>
     <tr><td align="left">verification_siret</td><td align="left">varchar(20) CHECK</td></tr>
     <tr><td align="left">denomination_officielle</td><td align="left">varchar(255)</td></tr>
@@ -28,7 +28,7 @@ digraph MPD {
     <tr><td align="left">nombre_total_lots, nombre_lots_habitation</td><td align="left">integer ≥ 0</td></tr>
     <tr><td align="left">type_syndic, syndic_raison_sociale</td><td align="left">varchar</td></tr>
     <tr><td align="left">syndic_siret</td><td align="left">char(14) CHECK</td></tr>
-    <tr><td align="left">mandat_en_cours</td><td align="left">varchar(30)</td></tr>
+    <tr><td align="left">mandat_en_cours</td><td align="left">varchar(255)</td></tr>
     <tr><td align="left">importe_le</td><td align="left">timestamptz</td></tr></table>>];
 
   site [label=<<table border="1" cellborder="0" cellspacing="0" cellpadding="3" color="#1B3D6E">
