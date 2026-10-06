@@ -18,7 +18,7 @@ from referentiel.extraction import nexo
 
 TABLES = ("clients", "sites", "contacts")
 PARCOURS = r"(Seq Scan|Index Scan|Index Only Scan|Bitmap Heap Scan)"
-JOINTURES = r"(Hash Join|Merge Join|Nested Loop|Hash Right Join|Hash Left Join)"
+JOINTURES = r"((?:Hash|Merge)(?: Left| Right| Full| Anti| Semi)? Join|Nested Loop)"
 
 
 def requete_sans_commentaires(sql: str) -> str:
@@ -38,16 +38,8 @@ def resumer(plan: list[str]) -> dict:
     return {
         "execution_ms": float(duree.group(1)) if duree else None,
         "lignes": int(lignes.group(1)) if lignes else None,
-        "parcours": sorted(
-            set(re.findall(r"(Seq Scan|Index Scan|Index Only Scan|Bitmap Heap Scan)", texte))
-        ),
-        "jointures": sorted(
-            set(
-                re.findall(
-                    r"(Hash Join|Merge Join|Nested Loop|Hash Right Join|Hash Left Join)", texte
-                )
-            )
-        ),
+        "parcours": sorted(set(re.findall(PARCOURS, texte))),
+        "jointures": sorted(set(re.findall(JOINTURES, texte))),
     }
 
 

@@ -48,13 +48,19 @@ Constituer, pour chaque client, l'identité légale (SIRET, type), l'adresse de 
 
 ## Mesures sur la base de production
 
-À compléter avec la sortie de `python -m referentiel.plans` exécuté sur le serveur (voir README).
+Exécution de `python -m referentiel.plans` sur le serveur de Nexo, le 06/10/2026 à 11h12 UTC, avec le compte `referentiel_lecture` (plans complets : `data/plans/20261006T111254Z.txt`, conservé sur le serveur).
 
-| Requête | Lignes | Plan choisi par PostgreSQL | Durée d'exécution | Plan par index (comparaison) |
-|---|---|---|---|---|
-| Clients | | | | |
-| Sites | | | | |
-| Contacts | | | | |
+| Requête | Lignes | Plan choisi par PostgreSQL | Durée | Plan par index (comparaison) | Durée |
+|---|---|---|---|---|---|
+| Clients | 35 | Parcours séquentiel, tri | 0,319 ms | Parcours de la clé primaire | 0,128 ms |
+| Sites | 145 | Parcours séquentiels, jointure par hachage | 0,682 ms | Parcours d'index, boucle imbriquée | 0,526 ms |
+| Contacts | 162 | Parcours séquentiels, jointure externe par hachage | 0,834 ms | Parcours d'index | 1,769 ms |
+
+**Interprétation.**
+- Les trois requêtes s'exécutent en moins d'une milliseconde chacune : le volume de la partie clientèle (35 clients, 145 sites, 162 contacts) ne pose aucun problème de performance, et l'extraction complète dure 0,07 s (manifeste du 06/10).
+- Pour les contacts, le plan choisi par PostgreSQL est deux fois plus rapide que le plan forcé par index : sur une petite table, le parcours séquentiel et la jointure par hachage sont le bon choix, ce que confirme la mesure.
+- Pour les clients et les sites, le plan par index paraît légèrement plus rapide, mais l'écart (0,2 ms) est dans la marge de mesure : chaque requête est d'abord exécutée avec le plan choisi, qui lit les pages depuis le disque, puis avec le plan par index, qui les trouve en mémoire. Cette mesure ne justifie donc pas de forcer un plan.
+- Conclusion : aucune optimisation supplémentaire n'est utile à ce volume. Les index existants (`ix_sites_client_id`, `idx_contacts_site_id`) sont utilisables, comme le montre le plan de comparaison, et prendront le relais si les tables grossissent ; la mesure sera rejouée à chaque évolution des requêtes.
 
 ## Exécution et tests
 

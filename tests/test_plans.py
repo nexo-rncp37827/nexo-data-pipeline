@@ -76,3 +76,8 @@ def test_configuration_incomplete(monkeypatch):
 @pytest.mark.parametrize("plan", [[], ["Seq Scan on x"]])
 def test_resume_plan_incomplet(plan):
     assert plans.resumer(plan)["execution_ms"] is None
+
+
+def test_toutes_les_formes_de_jointure_reconnues():
+    plan = ["Merge Left Join  (cost=1..2)", "  ->  Hash Left Join", "  ->  Nested Loop Left Join"]
+    assert plans.resumer(plan)["jointures"] == ["Hash Left Join", "Merge Left Join", "Nested Loop"]
