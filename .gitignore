@@ -1,18 +1,20 @@
-# Python-generated files
+# Données : jamais versionnées (données personnelles, fichiers volumineux)
+data/
+*.csv
+*.xlsx
+*.parquet
+!tests/donnees/*.csv
+
+# Secrets
+.env
+.env.*
+!.env.example
+
+# Python
 __pycache__/
 *.py[oc]
-build/
-dist/
-wheels/
-*.egg-info
-
-# Virtual environments
-.venv
-
-data/raw/
-data/clean/
-data/input/
-logs/
-.env
-__pycache__/
-*.pyc
+.venv/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/

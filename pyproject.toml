@@ -1,15 +1,29 @@
 [project]
-name = "nexo-data-pipeline"
+name = "nexo-referentiel-clients"
 version = "0.1.0"
-description = "Add your description here"
+description = "Référentiel clients de Nexo (ERP Foxabrille Nettoyage) : collecte, nettoyage, base de données et API — épreuve E1 RNCP37827"
 readme = "README.md"
-requires-python = ">=3.14"
+requires-python = ">=3.12,<3.13"
 dependencies = [
-    "beautifulsoup4>=4.15.0",
-    "faker>=40.23.0",
-    "openpyxl>=3.1.5",
-    "pandas>=3.0.3",
-    "psycopg2-binary>=2.9.12",
-    "python-dotenv>=1.2.2",
-    "requests>=2.34.2",
+    "httpx>=0.28",
+    "pandas>=2.2",
+    "psycopg[binary]>=3.2",
+    "pydantic-settings>=2.6",
 ]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+    "pytest-cov>=6.0",
+    "ruff>=0.8",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
