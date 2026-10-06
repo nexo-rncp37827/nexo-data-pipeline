@@ -9,6 +9,7 @@ Enchaînement : 1. nettoyage de chaque source ; 2. suppression des entrées corr
 copropriété dans le registre ; 5. contrôle de cohérence final.
 """
 
+import re
 from collections import defaultdict
 
 import pandas as pd
@@ -61,6 +62,7 @@ COLONNES_SITES = [
     "rapprochement_copropriete",
     "distance_copropriete_m",
     "numero_immatriculation",
+    "adresse_copropriete",
     "nom_usage_copropriete",
     "nombre_total_lots",
     "nombre_lots_habitation",
@@ -74,7 +76,6 @@ COLONNES_SITES = [
 COLONNES_CONTACTS = [
     "contact_id",
     "client_id",
-    "site_id",
     "nom",
     "role",
     "poste",
@@ -184,17 +185,31 @@ def cle_adresse_site(site: dict) -> str:
     return n.cle_texte(f"{site.get('numero') or ''} {site.get('voie') or ''}")
 
 
+def numero_principal(valeur) -> str | None:
+    """Premier numéro de voie (« 10 bis » → « 10 »)."""
+    m = re.match(r"\s*(\d+)", str(valeur)) if not n.absent(valeur) else None
+    return m.group(1) if m else None
+
+
 def score_adresse(site: dict, copro) -> float:
+    """1 si l'adresse du site figure telle quelle dans celle de la copropriété ; 0 si les numéros
+    de voie diffèrent (immeubles voisins) ; sinon la similarité des deux adresses."""
+    num_site = numero_principal(site.get("numero"))
+    num_copro = numero_principal(champ(copro, "numero_voie_adresse")) or numero_principal(
+        n.cle_texte(copro.get("adresse_reference"))
+    )
+    if num_site and num_copro and num_site != num_copro:
+        return 0.0
     cle_site = cle_adresse_site(site)
     cle_copro = n.cle_texte(copro.get("adresse_reference"))
-    if cle_site and cle_site in cle_copro:
+    if cle_site and f" {cle_site} " in f" {cle_copro} ":
         return 1.0
     return n.similarite(cle_site, cle_copro)
 
 
 def rapprocher(site: dict, candidats: list, siren_client: str | None) -> dict:
     """Associe un site à sa copropriété. Renvoie le statut, la distance et la copropriété."""
-    if site["geocodage"] != "fiable":
+    if site["geocodage"] == "echec" or site.get("latitude") is None:
         return {"rapprochement_copropriete": "non_evalue"}
     notes = []
     for copro in candidats:
@@ -217,6 +232,11 @@ def rapprocher(site: dict, candidats: list, siren_client: str | None) -> dict:
         ]
         if len(meme_syndic) == 1:
             certains = meme_syndic
+    if len(certains) > 1:
+        # Sinon, celle dont l'adresse est identique à celle du site, s'il y en a exactement une.
+        meme_adresse = [x for x in certains if x[2] >= SIMILARITE_ADRESSE]
+        if len(meme_adresse) == 1:
+            certains = meme_adresse
     if len(certains) == 1:
         statut, (_, d, _, copro) = "correspondance", certains[0]
     elif len(certains) > 1:
@@ -227,11 +247,15 @@ def rapprocher(site: dict, candidats: list, siren_client: str | None) -> dict:
         }
     else:
         statut, (_, d, _, copro) = "a_verifier", min(notes, key=lambda x: x[1])
+    if site["geocodage"] != "fiable":
+        # Adresse du site elle-même incertaine : le rapprochement reste à vérifier.
+        statut = "a_verifier"
     syndic = champ(copro, "siret_representant_legal")
     return {
         "rapprochement_copropriete": statut,
         "distance_copropriete_m": d,
         "numero_immatriculation": champ(copro, "numero_immatriculation"),
+        "adresse_copropriete": n.texte(copro.get("adresse_reference")),
         "nom_usage_copropriete": n.texte(copro.get("nom_usage_copropriete")),
         "nombre_total_lots": n.nombre_entier(copro.get("nombre_total_lots")),
         "nombre_lots_habitation": n.nombre_entier(copro.get("nombre_lots_habitation")),
@@ -326,9 +350,17 @@ def sites(
 # ── Contacts ─────────────────────────────────────────────────────────────────
 
 
-def contacts(brut: pd.DataFrame, table_clients: pd.DataFrame, rejets: Rejets) -> pd.DataFrame:
-    connus = set(table_clients["client_id"])
-    lignes, vus = [], set()
+def contacts(
+    brut: pd.DataFrame, table_clients: pd.DataFrame, table_sites: pd.DataFrame, rejets: Rejets
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Une personne = un contact unique par client ; ses sites vont dans une table d'association.
+
+    Dans Nexo, une même personne (le gestionnaire d'une régie, par exemple) est enregistrée une
+    fois par site qu'elle suit : ces lignes sont fusionnées en un seul contact (le plus petit
+    identifiant est gardé), relié à chacun de ses sites dans `contacts_sites`.
+    """
+    connus, sites_connus = set(table_clients["client_id"]), set(table_sites["site_id"])
+    personnes, liens, par_cle = [], set(), {}
     for _, c in brut.iterrows():
         ctid, cid, nom = (
             entier(c.get("contact_id")),
@@ -350,24 +382,32 @@ def contacts(brut: pd.DataFrame, table_clients: pd.DataFrame, rejets: Rejets) ->
             rejets.ajouter("contacts", ctid, "aucune coordonnée valide")
             continue
         cle = (cid, n.cle_texte(nom), mail or fixe or portable)
-        if cle in vus:
-            rejets.ajouter("contacts", ctid, "doublon (même client, même nom, même coordonnée)")
+        site = entier(c.get("site_id"))
+        if cle not in par_cle:
+            par_cle[cle] = ctid
+            personnes.append(
+                {
+                    "contact_id": ctid,
+                    "client_id": cid,
+                    "nom": nom,
+                    "role": (n.texte(c.get("role")) or "").lower() or None,
+                    "poste": n.texte(c.get("poste")),
+                    "email": mail,
+                    "telephone_fixe": fixe,
+                    "telephone_portable": portable,
+                }
+            )
+        elif site is None or (par_cle[cle], site) in liens:
+            rejets.ajouter("contacts", ctid, "doublon (même client, même personne, même site)")
             continue
-        vus.add(cle)
-        lignes.append(
-            {
-                "contact_id": ctid,
-                "client_id": cid,
-                "site_id": entier(c.get("site_id")),
-                "nom": nom,
-                "role": (n.texte(c.get("role")) or "").lower() or None,
-                "poste": n.texte(c.get("poste")),
-                "email": mail,
-                "telephone_fixe": fixe,
-                "telephone_portable": portable,
-            }
-        )
-    return pd.DataFrame(lignes, columns=COLONNES_CONTACTS)
+        if site is not None:
+            if site in sites_connus:
+                liens.add((par_cle[cle], site))
+            else:
+                rejets.ajouter("contacts_sites", ctid, "site inexistant ou écarté")
+    t_contacts = pd.DataFrame(personnes, columns=COLONNES_CONTACTS)
+    t_liens = pd.DataFrame(sorted(liens), columns=["contact_id", "site_id"])
+    return t_contacts, t_liens
 
 
 # ── Assemblage ───────────────────────────────────────────────────────────────
@@ -394,17 +434,28 @@ def agreger(sources: dict[str, pd.DataFrame]) -> tuple[dict[str, pd.DataFrame], 
     t_sites = sites(
         sources["nexo_sites"], sources["api_geocodage_sites"], t_copros, t_clients, rejets
     )
-    t_contacts = contacts(sources["nexo_contacts"], t_clients, rejets)
+    t_contacts, t_liens = contacts(sources["nexo_contacts"], t_clients, t_sites, rejets)
     # Contrôle final : toute référence pointe vers une ligne existante.
-    if not set(t_sites["client_id"]) <= set(t_clients["client_id"]) or not set(
-        t_contacts["client_id"]
-    ) <= set(t_clients["client_id"]):
-        raise ValueError("référentiel incohérent : référence vers un client absent")
-    t_clients, t_sites, t_contacts = typer(t_clients), typer(t_sites), typer(t_contacts)
+    ids_clients = set(t_clients["client_id"])
+    if (
+        not set(t_sites["client_id"]) <= ids_clients
+        or not set(t_contacts["client_id"]) <= ids_clients
+        or not set(t_liens["contact_id"]) <= set(t_contacts["contact_id"])
+        or not set(t_liens["site_id"]) <= set(t_sites["site_id"])
+    ):
+        raise ValueError("référentiel incohérent : référence vers une ligne absente")
+    t_clients, t_sites, t_contacts, t_liens = (
+        typer(t) for t in (t_clients, t_sites, t_contacts, t_liens)
+    )
     t_rejets = rejets.tableau()
     rapport = {
         "entrees": {k: len(v) for k, v in sources.items()},
-        "sorties": {"clients": len(t_clients), "sites": len(t_sites), "contacts": len(t_contacts)},
+        "sorties": {
+            "clients": len(t_clients),
+            "sites": len(t_sites),
+            "contacts": len(t_contacts),
+            "contacts_sites": len(t_liens),
+        },
         "rejets": t_rejets.groupby(["source", "motif"])
         .size()
         .reset_index(name="n")
@@ -427,5 +478,6 @@ def agreger(sources: dict[str, pd.DataFrame]) -> tuple[dict[str, pd.DataFrame], 
         "clients": t_clients,
         "sites": t_sites,
         "contacts": t_contacts,
+        "contacts_sites": t_liens,
         "rejets": t_rejets,
     }, rapport
