@@ -1,0 +1,29 @@
+# Environnement de développement et de démonstration (données fictives).
+services:
+  referentiel-db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: referentiel
+      POSTGRES_USER: referentiel
+      POSTGRES_PASSWORD: ${REFERENTIEL_DB_PASSWORD:?REFERENTIEL_DB_PASSWORD manquant dans .env}
+    volumes:
+      - referentiel_pgdata:/var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:5433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U referentiel -d referentiel"]
+      interval: 5s
+      retries: 10
+
+  pipeline:
+    build: .
+    env_file: .env
+    volumes:
+      - ./data:/app/data
+    depends_on:
+      referentiel-db:
+        condition: service_healthy
+    profiles: ["pipeline"]
+
+volumes:
+  referentiel_pgdata:

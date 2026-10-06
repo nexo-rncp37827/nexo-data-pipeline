@@ -1,0 +1,33 @@
+name: CI référentiel clients
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  qualite:
+    name: Lint et tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v6
+      - run: uv sync --locked
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+      - run: uv run pytest --cov=referentiel --cov-report=term-missing
+
+  image:
+    name: Image Docker
+    runs-on: ubuntu-latest
+    needs: qualite
+    steps:
+      - uses: actions/checkout@v5
+      - run: docker build -t referentiel:ci .
+      - run: docker run --rm referentiel:ci python -c "import referentiel.config"
