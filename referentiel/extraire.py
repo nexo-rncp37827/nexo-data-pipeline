@@ -26,6 +26,9 @@ def configurer_journal() -> None:
     logging.basicConfig(
         level=logging.INFO, format="%(asctime)s %(levelname)s [%(name)s] %(message)s"
     )
+    # Minimisation : pas une ligne par requête HTTP (elle contiendrait l'adresse ou le SIRET
+    # interrogé) ; seuls les comptages par source et les avertissements sont journalisés.
+    logging.getLogger("httpx").setLevel(logging.WARNING)
 
 
 def codes_postaux(sites: pd.DataFrame, geocodage: pd.DataFrame) -> set[str]:

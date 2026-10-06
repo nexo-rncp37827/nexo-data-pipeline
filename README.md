@@ -4,7 +4,7 @@ Chaîne de données de la **partie clientèle** de Nexo, l'ERP de Foxabrille Net
 
 Projet de l'épreuve E1 du titre Développeur en intelligence artificielle (RNCP37827, compétences C1 à C5).
 
-> Dépôt en reconstruction (octobre 2026). Ce README est complété à chaque étape : les sections « Requêtes SQL », « Agrégation », « Base de données et import » et « API » arrivent avec les lots correspondants.
+> Dépôt en reconstruction (octobre 2026). Ce README est complété à chaque étape : les sections « Agrégation », « Base de données et import » et « API » arrivent avec les lots correspondants.
 
 ## Sources
 
@@ -48,6 +48,16 @@ python -m referentiel.extraire [--rnic-fichier CHEMIN] [--sortie DOSSIER]
    ```bash
    docker compose -f docker-compose.yml -f docker-compose.serveur.yml --profile pipeline run --rm pipeline python -m referentiel.extraire
    ```
+
+## Requêtes SQL (C2)
+
+Requêtes versionnées dans `sql/`, documentées (choix de sélection, filtres, jointures, optimisations, mesures) dans [`docs/REQUETES_SQL.md`](docs/REQUETES_SQL.md).
+
+Mesure des plans d'exécution sur le serveur :
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.serveur.yml --profile pipeline run --rm pipeline python -m referentiel.plans
+```
 
 ## Données et confidentialité
 
