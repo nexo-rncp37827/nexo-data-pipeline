@@ -7,6 +7,7 @@ WORKDIR /app
 COPY pyproject.toml uv.lock ./
 RUN uv sync --locked --no-dev --no-install-project
 COPY referentiel ./referentiel
+COPY sql ./sql
 
 RUN useradd --uid 10001 --create-home pipeline && mkdir -p /app/data && chown pipeline /app/data
 USER pipeline

@@ -30,4 +30,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - run: docker build -t referentiel:ci .
-      - run: docker run --rm referentiel:ci python -c "import referentiel.config"
+      - name: Les requêtes SQL et le point de lancement sont présents dans l'image
+        run: |
+          docker run --rm referentiel:ci python -c "from referentiel.extraction import nexo; [nexo.lire_requete(f) for f in nexo.REQUETES.values()]"
+          docker run --rm referentiel:ci python -m referentiel.extraire --help
