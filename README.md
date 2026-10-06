@@ -4,7 +4,7 @@ Chaîne de données de la **partie clientèle** de Nexo, l'ERP de Foxabrille Net
 
 Projet de l'épreuve E1 du titre Développeur en intelligence artificielle (RNCP37827, compétences C1 à C5).
 
-> Dépôt en reconstruction (octobre 2026). Ce README est complété à chaque étape : les sections « Agrégation », « Base de données et import » et « API » arrivent avec les lots correspondants.
+> Dépôt en reconstruction (octobre 2026). Ce README est complété à chaque étape : les sections « Base de données et import » et « API » arrivent avec les lots correspondants.
 
 ## Sources
 
@@ -57,6 +57,14 @@ Mesure des plans d'exécution sur le serveur :
 
 ```bash
 docker compose -f docker-compose.yml -f docker-compose.serveur.yml --profile pipeline run --rm pipeline python -m referentiel.plans
+```
+
+## Agrégation (C3)
+
+Nettoyage, homogénéisation des formats et fusion des trois sources en un référentiel unique (clients, sites, contacts), avec la liste des entrées écartées et leur motif : voir [`docs/AGREGATION.md`](docs/AGREGATION.md).
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.serveur.yml --profile pipeline run --rm pipeline python -m referentiel.agreger
 ```
 
 ## Données et confidentialité
