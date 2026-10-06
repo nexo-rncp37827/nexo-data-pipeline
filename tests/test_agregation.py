@@ -398,3 +398,21 @@ def test_cli_sans_extraction(tmp_path, monkeypatch):
 def test_cli_fichier_manquant(tmp_path, sources):
     ecrire_extraction(tmp_path / "x", {"nexo_clients": sources["nexo_clients"]})
     assert agreger.lancer(tmp_path / "x", tmp_path / "sortie") == 1
+
+
+def test_syndic_sans_siret_benevole():
+    """Régression (06/10, données réelles) : SIRET du syndic absent (NaN avec pandas 3)."""
+    benevole = {**copro("AA1"), "siret_representant_legal": None, "type_syndic": "bénévole"}
+    autre = copro("BB2", siret=SIRET_SYNDIC_TIERS)
+    r = a.rapprocher(site_fiable(), candidats(benevole, autre), "123456789")
+    assert r["rapprochement_copropriete"] == "ambigu"
+    r = a.rapprocher(site_fiable(), candidats(benevole), "123456789")
+    assert r["rapprochement_copropriete"] == "correspondance"
+    assert r["syndic_siret"] is None and r["client_est_syndic"] is None
+
+
+def test_entiers_sans_decimale_dans_les_csv(tmp_path, sources):
+    tables, _ = a.agreger(sources)
+    tables["sites"].to_csv(tmp_path / "s.csv", index=False)
+    texte = (tmp_path / "s.csv").read_text()
+    assert ",40," in texte and "40.0" not in texte
