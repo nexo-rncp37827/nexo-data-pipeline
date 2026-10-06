@@ -6,9 +6,9 @@
 CREATE TABLE client (
     client_id               integer      PRIMARY KEY,           -- identifiant Nexo
     nom                     varchar(255) NOT NULL,
-    type_client             varchar(30)  NOT NULL
+    type_client             varchar(50)  NOT NULL
         CHECK (type_client IN ('regie', 'entreprise', 'copropriete', 'collectivite', 'particulier')),
-    statut                  varchar(30),
+    statut                  varchar(50),
     siret                   char(14)     CHECK (siret ~ '^[0-9]{14}$'),
     siren                   char(9)      CHECK (siren ~ '^[0-9]{9}$'),
     verification_siret      varchar(20)  NOT NULL
@@ -33,10 +33,10 @@ CREATE TABLE copropriete (
     nom_usage               varchar(255),
     nombre_total_lots       integer      CHECK (nombre_total_lots >= 0),
     nombre_lots_habitation  integer      CHECK (nombre_lots_habitation >= 0),
-    type_syndic             varchar(30),
+    type_syndic             varchar(255),                       -- texte du registre, non normalisé
     syndic_raison_sociale   varchar(255),                       -- jamais un syndic bénévole
     syndic_siret            char(14)     CHECK (syndic_siret ~ '^[0-9]{14}$'),
-    mandat_en_cours         varchar(30),
+    mandat_en_cours         varchar(255),                       -- texte du registre, non normalisé
     importe_le              timestamptz  NOT NULL DEFAULT now()
 );
 
