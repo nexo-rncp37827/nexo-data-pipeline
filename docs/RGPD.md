@@ -1,6 +1,6 @@
 # Données personnelles du référentiel clients (C4)
 
-Responsable des traitements : Foxabrille Nettoyage, représentée par sa gérante. Contact pour l'exercice des droits : contact@foxabrille.com. Document à valider par la gérante ; revu chaque année (procédure P6).
+Responsable des traitements : Foxabrille Nettoyage, représentée par sa gérante. Contact pour l'exercice des droits : contact@foxabrille.com. Validé par écrit par la direction le 07/10/2026 ; revu chaque année (procédure P6).
 
 ## Registre des traitements (article 30 du RGPD)
 
