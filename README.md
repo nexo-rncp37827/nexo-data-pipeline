@@ -154,13 +154,26 @@ Listes paginées : paramètres `limite` (1 à 500, 100 par défaut) et `decalage
    chmod 600 .env
    ```
    Contrôle : `grep -c '^API_CLIENTS=' .env` doit afficher `1`. Sans application déclarée, l'API refuse toute demande de jeton (401 « Identifiants invalides »). Après toute modification de `.env`, recréer le conteneur : `docker compose --profile api up -d --force-recreate api`.
-3. Lancer : `docker compose --profile api up -d --build api`.
+3. Lancer : `docker compose --profile api up -d --build api` (sur le serveur de Nexo : ajouter `-f docker-compose.yml -f docker-compose.serveur.yml`, voir « Utilisation par Nexo »).
 4. Vérifier : `curl -s http://127.0.0.1:8010/sante` doit renvoyer `{"statut":"ok","base":"ok"}`.
 5. Appel authentifié (`SECRET` saisi à l'étape 2) :
    ```bash
    JETON=$(curl -s -X POST http://127.0.0.1:8010/auth/jeton -d "username=nexo&password=$SECRET" | python3 -c "import sys, json; print(json.load(sys.stdin)['access_token'])")
    curl -s -H "Authorization: Bearer $JETON" "http://127.0.0.1:8010/clients?limite=2"
    ```
+
+### Utilisation par Nexo
+
+Le backend de Nexo est le consommateur de l'API : la fiche d'un client y affiche un onglet « Vérifications » alimenté par `GET /clients/{id}` et `GET /clients/{id}/sites` (dépôt `Nexo-erp`, `backend/services/referentiel_client.py`).
+
+- **Réseau** : sur le serveur, l'API rejoint le réseau interne de Nexo sous le nom `referentiel-api` (`docker-compose.serveur.yml`) ; le backend l'appelle sur `http://referentiel-api:8000`, sans passer par Internet.
+- **Compte dédié** : l'application `nexo-erp` n'a que la portée `referentiel` (Nexo possède déjà ses contacts : minimisation). Déclaration, en conservant les applications existantes :
+  ```bash
+  read -s SECRET_NEXO_ERP         # secret de l'application (openssl rand -hex 24), aussi copié dans .env.prod de Nexo
+  printf '%s\n' "$SECRET_NEXO_ERP" | docker compose -f docker-compose.yml -f docker-compose.serveur.yml --profile api run --rm -T api python -m referentiel.api.secret client nexo-erp referentiel --ajouter > api_clients.tmp
+  grep -q '^API_CLIENTS=' api_clients.tmp && sed -i '/^API_CLIENTS=/d' .env && cat api_clients.tmp >> .env; rm -f api_clients.tmp
+  docker compose -f docker-compose.yml -f docker-compose.serveur.yml --profile api up -d --force-recreate api
+  ```
 
 Tests : `tests/test_api_securite.py` (authentification, portées, jetons expirés ou falsifiés, lecture seule, spécification complète) et `tests/test_integration_api.py` (API branchée sur une vraie base créée par le MPD, avec le compte `referentiel_api`).
 
