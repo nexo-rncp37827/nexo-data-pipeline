@@ -191,6 +191,23 @@ def test_outil_secret(monkeypatch, capsys):
     assert outil_secret.main(["client", "nexo", "referentiel"]) == 2
 
 
+def test_outil_secret_ajoute_une_application(monkeypatch, capsys):
+    """--ajouter garde les applications déclarées et remplace celle du même identifiant."""
+    existant = [
+        {"id": "nexo", "empreinte": "scrypt:aa:bb", "portees": ["referentiel", "contacts"]},
+        {"id": "nexo-erp", "empreinte": "scrypt:cc:dd", "portees": ["referentiel"]},
+    ]
+    monkeypatch.setenv("API_CLIENTS", json.dumps(existant))
+    monkeypatch.setattr(outil_secret.getpass, "getpass", lambda _: "y" * 30)
+    assert outil_secret.main(["client", "nexo-erp", "referentiel", "--ajouter"]) == 0
+    clients = json.loads(capsys.readouterr().out.strip().split("=", 1)[1].strip("'"))
+    assert [c["id"] for c in clients] == ["nexo", "nexo-erp"]
+    assert clients[0] == existant[0]
+    assert securite.verifier_secret("y" * 30, clients[1]["empreinte"])
+    monkeypatch.setenv("API_CLIENTS", "pas du json")
+    assert outil_secret.main(["client", "nexo-erp", "referentiel", "--ajouter"]) == 2
+
+
 def test_clients_api_lus_depuis_l_environnement(monkeypatch):
     entree = [{"id": "nexo", "empreinte": securite.empreinte("y" * 30), "portees": ["referentiel"]}]
     monkeypatch.setenv("API_CLIENTS", json.dumps(entree))

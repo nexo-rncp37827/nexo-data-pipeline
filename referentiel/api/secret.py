@@ -3,6 +3,9 @@
     python -m referentiel.api.secret jwt                      # secret de signature des jetons
     python -m referentiel.api.secret client nexo referentiel contacts
         # demande le secret du client (non affiché) et imprime la valeur API_CLIENTS
+    python -m referentiel.api.secret client nexo-erp referentiel --ajouter
+        # idem, en conservant les applications déjà déclarées dans API_CLIENTS
+        # (une application du même identifiant est remplacée)
 
 Le secret du client n'est jamais écrit sur disque : seule son empreinte va dans `.env`.
 """
@@ -10,6 +13,7 @@ Le secret du client n'est jamais écrit sur disque : seule son empreinte va dans
 import argparse
 import getpass
 import json
+import os
 import secrets
 import sys
 
@@ -23,6 +27,9 @@ def main(argv=None) -> int:
     cli = sous.add_parser("client", help="générer l'entrée API_CLIENTS d'une application")
     cli.add_argument("identifiant")
     cli.add_argument("portees", nargs="+", choices=sorted(PORTEES))
+    cli.add_argument(
+        "--ajouter", action="store_true", help="conserver les applications déjà déclarées"
+    )
     args = parser.parse_args(argv)
 
     if args.commande == "jwt":
@@ -33,7 +40,15 @@ def main(argv=None) -> int:
         print("Secret trop court (24 caractères au moins).", file=sys.stderr)
         return 2
     entree = {"id": args.identifiant, "empreinte": empreinte(secret), "portees": args.portees}
-    print(f"API_CLIENTS='{json.dumps([entree])}'")
+    clients = []
+    if args.ajouter:
+        try:
+            clients = json.loads(os.environ.get("API_CLIENTS") or "[]")
+        except json.JSONDecodeError:
+            print("API_CLIENTS existant illisible : rien n'est modifié.", file=sys.stderr)
+            return 2
+        clients = [c for c in clients if c.get("id") != args.identifiant]
+    print(f"API_CLIENTS='{json.dumps([*clients, entree])}'")
     return 0
 
 
