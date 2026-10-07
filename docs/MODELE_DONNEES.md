@@ -9,7 +9,7 @@ Méthode Merise : modèle conceptuel (MCD), logique (MLD) puis physique (MPD), �
 | RG1 | Un client possède zéro, un ou plusieurs sites ; un site appartient à un seul client | POSSÉDER : CLIENT (0,n) — SITE (1,1) |
 | RG2 | Un contact travaille pour un seul client ; un client a zéro, un ou plusieurs contacts | TRAVAILLER POUR : CLIENT (0,n) — CONTACT (1,1) |
 | RG3 | Un contact suit zéro, un ou plusieurs sites ; un site est suivi par zéro, un ou plusieurs contacts (constat du 06/10 : une même personne suit jusqu'à plusieurs dizaines de sites) | SUIVRE : CONTACT (0,n) — SITE (0,n), association porteuse de la table `contact_site` |
-| RG4 | Un site correspond au plus à une copropriété immatriculée ; une copropriété n'est conservée que si au moins un site lui correspond | CORRESPONDRE À : SITE (0,1) — COPROPRIÉTÉ (1,n) |
+| RG4 | Un site correspond au plus à une copropriété immatriculée, avec un statut « correspondance » (certaine) ou « à vérifier » ; une copropriété n'est conservée que si au moins un site lui correspond (sites ambigus, sans copropriété ou non évalués : aucun lien) | CORRESPONDRE À : SITE (0,1) — COPROPRIÉTÉ (1,n), attributs statut et distance portés par `site` |
 | RG5 | Le client est-il le syndic de la copropriété ? Information **dérivée** (SIREN du client = 9 premiers chiffres du SIRET du syndic), jamais stockée | Calculée par la vue `v_site` |
 | RG6 | Chaque import est tracé (source, dates, compteurs, statut), sans lien avec les données importées | Entité isolée IMPORT |
 
@@ -30,7 +30,7 @@ Notation : clé primaire en **gras**, clé étrangère précédée de `#`.
 - contact_site (**#contact_id, #site_id**)
 - import (**import_id**, extraction, debut, fin, nb_clients, nb_sites, nb_coproprietes, nb_contacts, nb_contacts_sites, nb_supprimes, statut)
 
-Passage MCD → MLD : les associations (1,1)–(0,n) donnent une clé étrangère du côté (1,1) (`site.client_id`, `contact.client_id`) ; l'association (0,1)–(1,n) donne une clé étrangère facultative (`site.numero_immatriculation`) ; l'association (0,n)–(0,n) SUIVRE devient la table `contact_site`, dont la clé primaire est composée des deux clés étrangères. Les attributs du rapprochement (statut, distance) dépendent du site et restent dans `site`.
+Passage MCD → MLD : les associations (1,1)–(0,n) donnent une clé étrangère du côté (1,1) (`site.client_id`, `contact.client_id`) ; l'association (0,1)–(1,n) donne une clé étrangère facultative (`site.numero_immatriculation`) ; l'association (0,n)–(0,n) SUIVRE devient la table `contact_site`, dont la clé primaire est composée des deux clés étrangères. Les attributs du rapprochement (statut, distance) dépendent du site et restent dans `site`. Contrôle de RG4 sur la base : `SELECT count(*) FROM copropriete c WHERE NOT EXISTS (SELECT 1 FROM site s WHERE s.numero_immatriculation = c.numero_immatriculation)` renvoie 0 (06/10/2026 : 119 copropriétés pour 123 sites rattachés, 81 en correspondance et 42 à vérifier).
 
 ## MPD
 
